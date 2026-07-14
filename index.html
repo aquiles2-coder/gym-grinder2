@@ -11,16 +11,44 @@
     <header>
       <h1>🏋️ Gym Grinder</h1>
       <div id="stats">Level: 1 | XP: 0/100 | Strength: 10</div>
+      <div id="user-info"></div>
     </header>
-    
+
+    <!-- Login/Register Modal -->
+    <div id="auth-modal" class="modal">
+      <div class="modal-content">
+        <h2 id="modal-title">Login / Register</h2>
+        <input type="text" id="nickname" placeholder="Nickname" required>
+        <input type="password" id="password" placeholder="Password (min 4 chars)" required>
+        <button id="auth-btn">Login</button>
+        <button id="switch-mode">Switch to Register</button>
+        <p id="auth-message"></p>
+      </div>
+    </div>
+
     <section id="workout">
-      <h2>Current Exercise: Bench Press</h2>
-      <button id="grind-btn">GRIND REPS! 💪</button>
-      <p id="reps">Reps: 0</p>
+      <h2>Log Workout</h2>
+      <select id="exercise-select"></select>
+      <input type="number" id="weight" placeholder="Weight (kg)" step="0.5">
+      <input type="number" id="reps" placeholder="Reps" min="1">
+      <button id="confirm-btn">CONFIRM SET 💪</button>
+      <p id="reps-log">Today's total reps logged: 0</p>
     </section>
-    
-    <section id="shop">...</section>
+
+    <section id="leaderboards">
+      <h2>Leaderboards</h2>
+      <div id="global-lb"></div>
+      <div id="daily-lb"></div>
+      <div id="weekly-lb"></div>
+    </section>
+
+    <section id="shop">Coming soon...</section>
   </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
