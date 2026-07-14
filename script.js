@@ -1,57 +1,63 @@
-let player = {
-  level: 1,
-  xp: 0,
-  xpToNext: 100,
-  strength: 10,
-  coins: 50,
-  energy: 100,
-  maxEnergy: 100
-};
+// Exercises list
+const exercises = [
+  "Bench Press", "Pull Ups", "Push Ups", "Deadlift", "Leg Press",
+  "Leg Extension", "Leg Curl", "Chest Fly", "Pull-down", "Bent-over Row",
+  "Shoulder Press", "Lateral Raise", "Push-down", "Lying Triceps Extension",
+  "Dip", "Biceps Curl", "Hammer Curl"
+];
 
-const grindBtn = document.getElementById('grind-btn');
-const statsEl = document.getElementById('stats');
-const repsEl = document.getElementById('reps');
+// Firebase setup (in firebase-config.js)
+let db, auth, currentUser;
 
-let currentReps = 0;
+// XP system
+function getXPToNextLevel(level) {
+  return level * 100; // Level 1 → 100, Level 2 → 200 cumulative needed, etc.
+}
 
-grindBtn.addEventListener('click', () => {
-  if (player.energy <= 0) return alert("No energy left! Rest and come back.");
-  
-  currentReps += Math.floor(Math.random() * 3) + 1;
-  player.xp += 5 + Math.floor(player.strength / 5);
-  player.energy -= 2;
-  player.strength += 0.1; // tiny permanent gain
-  
-  repsEl.textContent = `Reps: ${currentReps}`;
-  updateStats();
-  
-  if (player.xp >= player.xpToNext) levelUp();
+function calculateTotalXPForLevel(level) {
+  let total = 0;
+  for (let i = 1; i < level; i++) total += i * 100;
+  return total;
+}
+
+// Daily decay (simplified - run on login)
+function applyDailyDecay() {
+  const today = new Date().toDateString();
+  const lastLogin = localStorage.getItem('lastLogin');
+  if (lastLogin !== today) {
+    // In real app: reset daily XP in Firestore
+    console.log("Daily XP reset");
+    localStorage.setItem('lastLogin', today);
+  }
+}
+
+// Populate exercises
+function populateExercises() {
+  const select = document.getElementById('exercise-select');
+  exercises.forEach(ex => {
+    const opt = document.createElement('option');
+    opt.value = ex;
+    opt.textContent = ex;
+    select.appendChild(opt);
+  });
+}
+
+// Confirm workout
+document.getElementById('confirm-btn').addEventListener('click', () => {
+  const exercise = document.getElementById('exercise-select').value;
+  const weight = parseFloat(document.getElementById('weight').value);
+  const reps = parseInt(document.getElementById('reps').value);
+
+  if (!exercise || !weight || !reps) {
+    alert("Fill weight and reps!");
+    return;
+  }
+
+  const factor = 0.1; // Tune this later
+  const xpGain = Math.floor(weight * reps * factor);
+
+  // Update user stats in Firestore here
+  console.log(`Logged ${exercise}: ${weight}kg x ${reps} → +${xpGain} XP`);
+  // Then call updateUserXP(xpGain)
 });
-
-function updateStats() {
-  statsEl.textContent = `Level: ${player.level} | XP: \( {Math.floor(player.xp)}/ \){player.xpToNext} | Strength: ${player.strength.toFixed(1)} | Coins: ${player.coins} | Energy: \( {player.energy}/ \){player.maxEnergy}`;
-}
-
-function levelUp() {
-  player.level++;
-  player.xp = 0;
-  player.xpToNext = Math.floor(player.xpToNext * 1.5);
-  player.strength += 5;
-  alert(`Level Up! Now level ${player.level} 💪`);
-  updateStats();
-}
-
-// Load/Save
-function saveGame() { localStorage.setItem('gymGrinderSave', JSON.stringify(player)); }
-function loadGame() {
-  const saved = localStorage.getItem('gymGrinderSave');
-  if (saved) player = JSON.parse(saved);
-}
-loadGame();
-setInterval(() => { saveGame(); updateStats(); }, 5000);
-
-// Idle energy regen (every 10 seconds)
-setInterval(() => {
-  if (player.energy < player.maxEnergy) player.energy = Math.min(player.maxEnergy, player.energy + 5);
-  updateStats();
 }, 10000);
