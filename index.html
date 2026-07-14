@@ -14,40 +14,32 @@
       <div id="stats" class="stats">Level: 1 | XP: 0/100 | Strength: 10</div>
     </header>
 
-    <!-- Auth -->
     <div id="auth-section">
       <button id="show-auth-btn">Login / Register</button>
     </div>
 
-    <!-- Main Game -->
     <div id="main-game" style="display: none;">
       <section id="workout">
         <h2>Log Workout</h2>
         <select id="exercise-select"></select><br><br>
-        <input type="number" id="weight" placeholder="Weight (kg)" step="0.5" style="padding:10px; font-size:18px;">
-        <input type="number" id="reps" placeholder="Reps" min="1" style="padding:10px; font-size:18px;">
+        <input type="number" id="weight" placeholder="Weight (kg)" step="0.5">
+        <input type="number" id="reps" placeholder="Reps" min="1">
         <button id="confirm-btn">CONFIRM SET 💪</button>
         <p id="log-message"></p>
       </section>
 
       <section id="leaderboards">
         <h2>Leaderboards</h2>
-        <h3>Global Top 20</h3>
         <div id="global-lb" class="stats"></div>
-        
-        <h3>Daily Top 10</h3>
-        <div id="daily-lb" class="stats"></div>
-        
-        <h3>Weekly Top 10</h3>
-        <div id="weekly-lb" class="stats"></div>
       </section>
     </div>
   </div>
 
-  <!-- Firebase SDKs -->
+  <!-- Firebase Scripts -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  
   <script src="firebase-config.js"></script>
   <script src="script.js"></script>
 </body>
