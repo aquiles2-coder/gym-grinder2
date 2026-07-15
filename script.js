@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   populateExercises();
   setupAuthListeners();
-  setupLogout();   // Always setup logout button
+  setupLogout();
 
   auth.onAuthStateChanged(async (user) => {
     if (user) {
@@ -51,6 +51,7 @@ async function handleAuth() {
     let userCred;
     try {
       userCred = await auth.signInWithEmailAndPassword(email, password);
+      alert("Logged in successfully!");
     } catch (e) {
       if (e.code === 'auth/user-not-found') {
         userCred = await auth.createUserWithEmailAndPassword(email, password);
@@ -65,11 +66,11 @@ async function handleAuth() {
         });
         alert("Account created successfully!");
       } else {
-        throw e;
+        alert("Error: " + e.message);
       }
     }
   } catch (error) {
-    alert("Error: " + error.message);
+    alert("Something went wrong: " + error.message);
   }
 }
 
@@ -77,8 +78,8 @@ async function loadUserData(uid) {
   const doc = await db.collection('users').doc(uid).get();
   if (doc.exists) {
     const data = doc.data();
-    const nextXP = (data.level || 1) * 100 + calculateCumulativeXP(data.level || 1);
-    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${nextXP} | Strength: ${data.strength}`;
+    const nextXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 100;
+    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp || 0}/${nextXP} | Strength: ${data.strength || 10}`;
     document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
   }
 }
@@ -94,7 +95,6 @@ function setupWorkoutListeners() {
 }
 
 async function logWorkout() {
-  // ... (same as previous version)
   const exercise = document.getElementById('exercise-select').value;
   const weight = parseFloat(document.getElementById('weight').value);
   const reps = parseInt(document.getElementById('reps').value);
@@ -130,9 +130,10 @@ async function logWorkout() {
     document.getElementById('log-message').innerHTML = `✅ +${xpGain} XP from ${exercise}!`;
     await loadUserData(currentUser.uid);
     loadLeaderboards();
+
   } catch (error) {
     console.error(error);
-    alert("Error saving workout.");
+    alert("Error saving workout. Check F12 console.");
   }
 }
 
@@ -142,7 +143,7 @@ async function loadLeaderboards() {
     let html = "<h3>🌍 Global Top 20</h3><ol>";
     globalSnap.forEach(doc => {
       const d = doc.data();
-      html += `<li>${d.nickname} — Lvl ${d.level}</li>`;
+      html += `<li>${d.nickname} — Level ${d.level}</li>`;
     });
     html += "</ol>";
     document.getElementById('global-lb').innerHTML = html;
