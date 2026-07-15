@@ -13,8 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('auth-section').style.display = 'none';
       document.getElementById('main-game').style.display = 'block';
       await loadUserData(user.uid);
-      setupWorkoutListeners();           // ← Added here
-      loadLeaderboards();        // ← Add this line
+      setupWorkoutListeners();
+      loadLeaderboards(); 
     } else {
       document.getElementById('auth-section').style.display = 'block';
       document.getElementById('main-game').style.display = 'none';
@@ -50,7 +50,6 @@ async function handleAuth() {
     let userCred;
     try {
       userCred = await auth.signInWithEmailAndPassword(email, password);
-      alert("Login successful!");
     } catch (e) {
       if (e.code === 'auth/user-not-found') {
         userCred = await auth.createUserWithEmailAndPassword(email, password);
@@ -59,17 +58,17 @@ async function handleAuth() {
           level: 1,
           xp: 0,
           strength: 10,
-          approved: false,
+          approved: true,           // ← Set to true for easier testing
           dailyXP: 0,
           weeklyXP: 0
         });
-        alert("Account created! Ask admin to approve it in Firestore.");
+        alert("Account created!");
       } else {
-        alert("Error: " + e.message);
+        throw e;
       }
     }
   } catch (error) {
-    alert("Something went wrong: " + error.message);
+    alert("Error: " + error.message);
   }
 }
 
@@ -77,11 +76,6 @@ async function loadUserData(uid) {
   const doc = await db.collection('users').doc(uid).get();
   if (doc.exists) {
     const data = doc.data();
-    if (!data.approved) {
-      alert("Account not approved yet.");
-      auth.signOut();
-      return;
-    }
     document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${data.level * 100} | Strength: ${data.strength}`;
     document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
   }
@@ -96,8 +90,8 @@ async function logWorkout() {
   const weight = parseFloat(document.getElementById('weight').value);
   const reps = parseInt(document.getElementById('reps').value);
 
-  if (!weight || !reps) {
-    alert("Please enter weight and reps!");
+  if (isNaN(weight) || isNaN(reps) || reps < 1) {
+    alert("Please enter valid weight and reps!");
     return;
   }
 
@@ -109,8 +103,8 @@ async function logWorkout() {
     const doc = await userRef.get();
     const data = doc.data();
 
-    let newXP = data.xp + xpGain;
-    let newLevel = data.level;
+    let newXP = (data.xp || 0) + xpGain;
+    let newLevel = data.level || 1;
 
     while (newXP >= newLevel * 100) {
       newLevel++;
@@ -119,54 +113,43 @@ async function logWorkout() {
     await userRef.update({
       xp: newXP,
       level: newLevel,
-      strength: Math.floor(data.strength + (xpGain / 30)),
-      dailyXP: (data.dailyXP || 0) + xpGain
+      strength: Math.floor((data.strength || 10) + (xpGain / 30)),
+      dailyXP: (data.dailyXP || 0) + xpGain,
+      weeklyXP: (data.weeklyXP || 0) + xpGain
     });
 
-    document.getElementById('log-message').innerHTML = 
-      `✅ +${xpGain} XP from ${exercise}!`;
-
+    document.getElementById('log-message').innerHTML = `✅ +${xpGain} XP from ${exercise}!`;
     await loadUserData(currentUser.uid);
+    loadLeaderboards();        // Refresh leaderboards
 
-    
   } catch (error) {
-    console.error(error);
-    alert("Error saving workout.");
+    console.error("Workout error:", error);
+    alert("Error saving workout. Check console (F12)");
   }
 }
-// ====================== LEADERBOARDS ======================
+
+// Leaderboards
 async function loadLeaderboards() {
   try {
-    // Global Top 20
-    const globalSnap = await db.collection('users')
-      .orderBy('level', 'desc')
-      .limit(20)
-      .get();
-
-    let globalHTML = "<h3>🌍 Global Top 20</h3><ol>";
+    const globalSnap = await db.collection('users').orderBy('level', 'desc').limit(20).get();
+    let html = "<h3>🌍 Global Top 20</h3><ol>";
     globalSnap.forEach(doc => {
       const d = doc.data();
-      globalHTML += `<li><strong>${d.nickname}</strong> - Level ${d.level} (${d.xp} XP)</li>`;
+      html += `<li>${d.nickname} — Level ${d.level} (${d.xp} XP)</li>`;
     });
-    globalHTML += "</ol>";
-    document.getElementById('global-lb').innerHTML = globalHTML;
+    html += "</ol>";
+    document.getElementById('global-lb').innerHTML = html;
 
-    // Daily Top 10 (you can expand weekly later)
-    const dailySnap = await db.collection('users')
-      .orderBy('dailyXP', 'desc')
-      .limit(10)
-      .get();
-
+    const dailySnap = await db.collection('users').orderBy('dailyXP', 'desc').limit(10).get();
     let dailyHTML = "<h3>📅 Daily Top 10</h3><ol>";
     dailySnap.forEach(doc => {
       const d = doc.data();
-      dailyHTML += `<li><strong>${d.nickname}</strong> - ${d.dailyXP} XP today</li>`;
+      dailyHTML += `<li>${d.nickname} — ${d.dailyXP} XP</li>`;
     });
     dailyHTML += "</ol>";
-    document.getElementById('daily-lb').innerHTML = dailyHTML;
+    if (document.getElementById('daily-lb')) document.getElementById('daily-lb').innerHTML = dailyHTML;
 
   } catch (e) {
-    console.error(e);
-    document.getElementById('global-lb').innerHTML = "Error loading leaderboards";
+    console.error("Leaderboard error:", e);
   }
 }
