@@ -14,7 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('main-game').style.display = 'block';
       await loadUserData(user.uid);
       setupWorkoutListeners();
-      loadLeaderboards(); 
+      loadLeaderboards();
+      setupLogout();
     } else {
       document.getElementById('auth-section').style.display = 'block';
       document.getElementById('main-game').style.display = 'none';
@@ -180,4 +181,21 @@ async function loadLeaderboards() {
   } catch (e) {
     console.error("Leaderboard error:", e);
   }
+
+  // Logout functionality
+function setupLogout() {
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      if (confirm("Are you sure you want to logout?")) {
+        await auth.signOut();
+        alert("Logged out successfully.");
+      }
+    });
+  }
+}
+
+// Call it after auth state change
+// Add this line inside onAuthStateChanged, after setupWorkoutListeners():
+setupLogout();
 }
