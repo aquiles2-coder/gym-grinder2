@@ -103,10 +103,18 @@ async function logWorkout() {
     const doc = await userRef.get();
     const data = doc.data();
 
-    let newXP = (data.xp || 0) + xpGain;
-    let newLevel = data.level || 1;
+    let currentXP = data.xp || 0;
+    let currentLevel = data.level || 1;
 
-    while (newXP >= newLevel * 100) {
+    let newXP = currentXP + xpGain;
+    let newLevel = currentLevel;
+
+    // Calculate required XP for next level
+    while (true) {
+      const xpNeededForNextLevel = newLevel * 100;
+      if (newXP < (calculateCumulativeXP(newLevel) + xpNeededForNextLevel)) {
+        break;
+      }
       newLevel++;
     }
 
@@ -120,11 +128,31 @@ async function logWorkout() {
 
     document.getElementById('log-message').innerHTML = `✅ +${xpGain} XP from ${exercise}!`;
     await loadUserData(currentUser.uid);
-    loadLeaderboards();        // Refresh leaderboards
+    loadLeaderboards();
 
   } catch (error) {
     console.error("Workout error:", error);
-    alert("Error saving workout. Check console (F12)");
+    alert("Error saving workout.");
+  }
+}
+
+// Helper function for cumulative XP
+function calculateCumulativeXP(level) {
+  let total = 0;
+  for (let i = 1; i < level; i++) {
+    total += i * 100;
+  }
+  return total;
+}
+
+// Also update loadUserData to show correct next level XP
+async function loadUserData(uid) {
+  const doc = await db.collection('users').doc(uid).get();
+  if (doc.exists) {
+    const data = doc.data();
+    const nextLevelXP = calculateCumulativeXP(data.level) + (data.level * 100);
+    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${nextLevelXP} | Strength: ${data.strength}`;
+    document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
   }
 }
 
