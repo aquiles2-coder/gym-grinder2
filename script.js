@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('main-game').style.display = 'block';
       await loadUserData(user.uid);
       setupWorkoutListeners();
-      loadLeaderboards(); 
+      loadLeaderboards();
     } else {
       document.getElementById('auth-section').style.display = 'block';
       document.getElementById('main-game').style.display = 'none';
@@ -50,6 +50,7 @@ async function handleAuth() {
     let userCred;
     try {
       userCred = await auth.signInWithEmailAndPassword(email, password);
+      alert("✅ Login successful!");
     } catch (e) {
       if (e.code === 'auth/user-not-found') {
         userCred = await auth.createUserWithEmailAndPassword(email, password);
@@ -58,17 +59,17 @@ async function handleAuth() {
           level: 1,
           xp: 0,
           strength: 10,
-          approved: true,           // ← Set to true for easier testing
+          approved: true,
           dailyXP: 0,
           weeklyXP: 0
         });
-        alert("Account created!");
+        alert("✅ Account created successfully!");
       } else {
-        throw e;
+        alert("Error: " + e.message);
       }
     }
   } catch (error) {
-    alert("Error: " + error.message);
+    alert("Something went wrong: " + error.message);
   }
 }
 
@@ -76,9 +77,16 @@ async function loadUserData(uid) {
   const doc = await db.collection('users').doc(uid).get();
   if (doc.exists) {
     const data = doc.data();
-    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${data.level * 100} | Strength: ${data.strength}`;
+    const nextLevelXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 100;
+    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp || 0}/${nextLevelXP} | Strength: ${data.strength || 10}`;
     document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
   }
+}
+
+function calculateCumulativeXP(level) {
+  let total = 0;
+  for (let i = 1; i < level; i++) total += i * 100;
+  return total;
 }
 
 function setupWorkoutListeners() {
@@ -103,18 +111,10 @@ async function logWorkout() {
     const doc = await userRef.get();
     const data = doc.data();
 
-    let currentXP = data.xp || 0;
-    let currentLevel = data.level || 1;
+    let newXP = (data.xp || 0) + xpGain;
+    let newLevel = data.level || 1;
 
-    let newXP = currentXP + xpGain;
-    let newLevel = currentLevel;
-
-    // Calculate required XP for next level
-    while (true) {
-      const xpNeededForNextLevel = newLevel * 100;
-      if (newXP < (calculateCumulativeXP(newLevel) + xpNeededForNextLevel)) {
-        break;
-      }
+    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
       newLevel++;
     }
 
@@ -136,27 +136,6 @@ async function logWorkout() {
   }
 }
 
-// Helper function for cumulative XP
-function calculateCumulativeXP(level) {
-  let total = 0;
-  for (let i = 1; i < level; i++) {
-    total += i * 100;
-  }
-  return total;
-}
-
-// Also update loadUserData to show correct next level XP
-async function loadUserData(uid) {
-  const doc = await db.collection('users').doc(uid).get();
-  if (doc.exists) {
-    const data = doc.data();
-    const nextLevelXP = calculateCumulativeXP(data.level) + (data.level * 100);
-    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${nextLevelXP} | Strength: ${data.strength}`;
-    document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
-  }
-}
-
-// Leaderboards
 async function loadLeaderboards() {
   try {
     const globalSnap = await db.collection('users').orderBy('level', 'desc').limit(20).get();
