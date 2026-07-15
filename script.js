@@ -5,7 +5,13 @@ document.addEventListener('DOMContentLoaded', () => {
   db = firebase.firestore();
 
   populateExercises();
-  setupAuthListeners();
+function setupAuthListeners() {
+  const btn = document.getElementById('show-auth-btn');
+  btn.addEventListener('click', () => {
+    alert("Button clicked!");   // Test if button works
+    handleAuth();
+  });
+}
   setupLogout();
 
   auth.onAuthStateChanged(async (user) => {
