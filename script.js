@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('main-game').style.display = 'block';
       await loadUserData(user.uid);
       setupWorkoutListeners();           // ← Added here
+      loadLeaderboards();        // ← Add this line
     } else {
       document.getElementById('auth-section').style.display = 'block';
       document.getElementById('main-game').style.display = 'none';
@@ -126,9 +127,7 @@ async function logWorkout() {
       `✅ +${xpGain} XP from ${exercise}!`;
 
     await loadUserData(currentUser.uid);
-    await loadUserData(user.uid);
-    setupWorkoutListeners();
-    loadLeaderboards();        // ← Add this line
+
     
   } catch (error) {
     console.error(error);
