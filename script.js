@@ -46,20 +46,24 @@ function setupAuthListeners() {
 
 async function handleAuth() {
   const nickname = prompt("Enter Nickname:");
-  if (!nickname) return;
+  if (!nickname) return alert("Nickname is required");
 
-  const password = prompt("Enter Password (min 4 chars):");
-  if (password.length < 4) return alert("Password too short!");
+  const password = prompt("Enter Password (min 4 characters):");
+  if (password.length < 4) return alert("Password must be at least 4 characters");
 
   const email = `${nickname.toLowerCase().replace(/\s+/g, '')}@gymgrinder.app`;
 
   try {
+    console.log("Trying to login with:", email);
+
     let userCred;
     try {
       userCred = await auth.signInWithEmailAndPassword(email, password);
-      alert("Logged in successfully!");
+      alert("✅ Login successful!");
+      console.log("Login successful");
     } catch (e) {
-      if (e.code === 'auth/user-not-found') {
+      console.log("Login failed, trying to create account...", e.code);
+      if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
         userCred = await auth.createUserWithEmailAndPassword(email, password);
         await db.collection('users').doc(userCred.user.uid).set({
           nickname: nickname,
@@ -70,13 +74,14 @@ async function handleAuth() {
           dailyXP: 0,
           weeklyXP: 0
         });
-        alert("Account created successfully!");
+        alert("✅ Account created and logged in!");
       } else {
         alert("Error: " + e.message);
       }
     }
   } catch (error) {
-    alert("Something went wrong: " + error.message);
+    console.error("Auth error:", error);
+    alert("Failed: " + error.message);
   }
 }
 
