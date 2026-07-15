@@ -1,5 +1,5 @@
 let db, auth, currentUser = null;
-
+console.log("Script loaded successfully");
 document.addEventListener('DOMContentLoaded', () => {
   auth = firebase.auth();
   db = firebase.firestore();
