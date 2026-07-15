@@ -1,18 +1,11 @@
 let db, auth, currentUser = null;
-console.log("Script loaded successfully");
+
 document.addEventListener('DOMContentLoaded', () => {
   auth = firebase.auth();
   db = firebase.firestore();
 
   populateExercises();
-function setupAuthListeners() {
-  const btn = document.getElementById('show-auth-btn');
-  btn.addEventListener('click', () => {
-    alert("Button clicked!");   // Test if button works
-    handleAuth();
-  });
-}
-  setupLogout();
+  setupAuthListeners();
 
   auth.onAuthStateChanged(async (user) => {
     if (user) {
@@ -21,7 +14,7 @@ function setupAuthListeners() {
       document.getElementById('main-game').style.display = 'block';
       await loadUserData(user.uid);
       setupWorkoutListeners();
-      loadLeaderboards();
+      loadLeaderboards(); 
     } else {
       document.getElementById('auth-section').style.display = 'block';
       document.getElementById('main-game').style.display = 'none';
@@ -46,42 +39,36 @@ function setupAuthListeners() {
 
 async function handleAuth() {
   const nickname = prompt("Enter Nickname:");
-  if (!nickname) return alert("Nickname is required");
+  if (!nickname) return;
 
-  const password = prompt("Enter Password (min 4 characters):");
-  if (password.length < 4) return alert("Password must be at least 4 characters");
+  const password = prompt("Enter Password (min 4 chars):");
+  if (password.length < 4) return alert("Password too short!");
 
   const email = `${nickname.toLowerCase().replace(/\s+/g, '')}@gymgrinder.app`;
 
   try {
-    console.log("Trying to login with:", email);
-
     let userCred;
     try {
       userCred = await auth.signInWithEmailAndPassword(email, password);
-      alert("✅ Login successful!");
-      console.log("Login successful");
     } catch (e) {
-      console.log("Login failed, trying to create account...", e.code);
-      if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
+      if (e.code === 'auth/user-not-found') {
         userCred = await auth.createUserWithEmailAndPassword(email, password);
         await db.collection('users').doc(userCred.user.uid).set({
           nickname: nickname,
           level: 1,
           xp: 0,
           strength: 10,
-          approved: true,
+          approved: true,           // ← Set to true for easier testing
           dailyXP: 0,
           weeklyXP: 0
         });
-        alert("✅ Account created and logged in!");
+        alert("Account created!");
       } else {
-        alert("Error: " + e.message);
+        throw e;
       }
     }
   } catch (error) {
-    console.error("Auth error:", error);
-    alert("Failed: " + error.message);
+    alert("Error: " + error.message);
   }
 }
 
@@ -89,16 +76,9 @@ async function loadUserData(uid) {
   const doc = await db.collection('users').doc(uid).get();
   if (doc.exists) {
     const data = doc.data();
-    const nextXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 100;
-    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp || 0}/${nextXP} | Strength: ${data.strength || 10}`;
+    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${data.level * 100} | Strength: ${data.strength}`;
     document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
   }
-}
-
-function calculateCumulativeXP(level) {
-  let total = 0;
-  for (let i = 1; i < level; i++) total += i * 100;
-  return total;
 }
 
 function setupWorkoutListeners() {
@@ -123,10 +103,18 @@ async function logWorkout() {
     const doc = await userRef.get();
     const data = doc.data();
 
-    let newXP = (data.xp || 0) + xpGain;
-    let newLevel = data.level || 1;
+    let currentXP = data.xp || 0;
+    let currentLevel = data.level || 1;
 
-    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
+    let newXP = currentXP + xpGain;
+    let newLevel = currentLevel;
+
+    // Calculate required XP for next level
+    while (true) {
+      const xpNeededForNextLevel = newLevel * 100;
+      if (newXP < (calculateCumulativeXP(newLevel) + xpNeededForNextLevel)) {
+        break;
+      }
       newLevel++;
     }
 
@@ -143,33 +131,53 @@ async function logWorkout() {
     loadLeaderboards();
 
   } catch (error) {
-    console.error(error);
-    alert("Error saving workout. Check F12 console.");
+    console.error("Workout error:", error);
+    alert("Error saving workout.");
   }
 }
 
+// Helper function for cumulative XP
+function calculateCumulativeXP(level) {
+  let total = 0;
+  for (let i = 1; i < level; i++) {
+    total += i * 100;
+  }
+  return total;
+}
+
+// Also update loadUserData to show correct next level XP
+async function loadUserData(uid) {
+  const doc = await db.collection('users').doc(uid).get();
+  if (doc.exists) {
+    const data = doc.data();
+    const nextLevelXP = calculateCumulativeXP(data.level) + (data.level * 100);
+    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${nextLevelXP} | Strength: ${data.strength}`;
+    document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
+  }
+}
+
+// Leaderboards
 async function loadLeaderboards() {
   try {
     const globalSnap = await db.collection('users').orderBy('level', 'desc').limit(20).get();
     let html = "<h3>🌍 Global Top 20</h3><ol>";
     globalSnap.forEach(doc => {
       const d = doc.data();
-      html += `<li>${d.nickname} — Level ${d.level}</li>`;
+      html += `<li>${d.nickname} — Level ${d.level} (${d.xp} XP)</li>`;
     });
     html += "</ol>";
     document.getElementById('global-lb').innerHTML = html;
-  } catch (e) {
-    console.error(e);
-  }
-}
 
-function setupLogout() {
-  const logoutBtn = document.getElementById('logout-btn');
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', () => {
-      if (confirm("Logout?")) {
-        auth.signOut();
-      }
+    const dailySnap = await db.collection('users').orderBy('dailyXP', 'desc').limit(10).get();
+    let dailyHTML = "<h3>📅 Daily Top 10</h3><ol>";
+    dailySnap.forEach(doc => {
+      const d = doc.data();
+      dailyHTML += `<li>${d.nickname} — ${d.dailyXP} XP</li>`;
     });
+    dailyHTML += "</ol>";
+    if (document.getElementById('daily-lb')) document.getElementById('daily-lb').innerHTML = dailyHTML;
+
+  } catch (e) {
+    console.error("Leaderboard error:", e);
   }
 }
