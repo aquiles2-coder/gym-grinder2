@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('auth-section').style.display = 'none';
       document.getElementById('main-game').style.display = 'block';
       await loadUserData(user.uid);
+      setupWorkoutListeners();           // ← Added here
     } else {
       document.getElementById('auth-section').style.display = 'block';
       document.getElementById('main-game').style.display = 'none';
@@ -61,7 +62,7 @@ async function handleAuth() {
           dailyXP: 0,
           weeklyXP: 0
         });
-        alert("Account created! Now ask admin to approve (set approved = true in Firestore).");
+        alert("Account created! Ask admin to approve it in Firestore.");
       } else {
         alert("Error: " + e.message);
       }
@@ -80,7 +81,54 @@ async function loadUserData(uid) {
       auth.signOut();
       return;
     }
-    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/100 | Strength: ${data.strength}`;
+    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${data.level * 100} | Strength: ${data.strength}`;
     document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
+  }
+}
+
+function setupWorkoutListeners() {
+  document.getElementById('confirm-btn').addEventListener('click', logWorkout);
+}
+
+async function logWorkout() {
+  const exercise = document.getElementById('exercise-select').value;
+  const weight = parseFloat(document.getElementById('weight').value);
+  const reps = parseInt(document.getElementById('reps').value);
+
+  if (!weight || !reps) {
+    alert("Please enter weight and reps!");
+    return;
+  }
+
+  const factor = 0.1;
+  const xpGain = Math.floor(weight * reps * factor);
+
+  try {
+    const userRef = db.collection('users').doc(currentUser.uid);
+    const doc = await userRef.get();
+    const data = doc.data();
+
+    let newXP = data.xp + xpGain;
+    let newLevel = data.level;
+
+    while (newXP >= newLevel * 100) {
+      newLevel++;
+    }
+
+    await userRef.update({
+      xp: newXP,
+      level: newLevel,
+      strength: Math.floor(data.strength + (xpGain / 30)),
+      dailyXP: (data.dailyXP || 0) + xpGain
+    });
+
+    document.getElementById('log-message').innerHTML = 
+      `✅ +${xpGain} XP from ${exercise}!`;
+
+    await loadUserData(currentUser.uid);
+
+  } catch (error) {
+    console.error(error);
+    alert("Error saving workout.");
   }
 }
