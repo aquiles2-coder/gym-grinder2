@@ -126,9 +126,48 @@ async function logWorkout() {
       `✅ +${xpGain} XP from ${exercise}!`;
 
     await loadUserData(currentUser.uid);
-
+    await loadUserData(user.uid);
+    setupWorkoutListeners();
+    loadLeaderboards();        // ← Add this line
+    
   } catch (error) {
     console.error(error);
     alert("Error saving workout.");
+  }
+}
+// ====================== LEADERBOARDS ======================
+async function loadLeaderboards() {
+  try {
+    // Global Top 20
+    const globalSnap = await db.collection('users')
+      .orderBy('level', 'desc')
+      .limit(20)
+      .get();
+
+    let globalHTML = "<h3>🌍 Global Top 20</h3><ol>";
+    globalSnap.forEach(doc => {
+      const d = doc.data();
+      globalHTML += `<li><strong>${d.nickname}</strong> - Level ${d.level} (${d.xp} XP)</li>`;
+    });
+    globalHTML += "</ol>";
+    document.getElementById('global-lb').innerHTML = globalHTML;
+
+    // Daily Top 10 (you can expand weekly later)
+    const dailySnap = await db.collection('users')
+      .orderBy('dailyXP', 'desc')
+      .limit(10)
+      .get();
+
+    let dailyHTML = "<h3>📅 Daily Top 10</h3><ol>";
+    dailySnap.forEach(doc => {
+      const d = doc.data();
+      dailyHTML += `<li><strong>${d.nickname}</strong> - ${d.dailyXP} XP today</li>`;
+    });
+    dailyHTML += "</ol>";
+    document.getElementById('daily-lb').innerHTML = dailyHTML;
+
+  } catch (e) {
+    console.error(e);
+    document.getElementById('global-lb').innerHTML = "Error loading leaderboards";
   }
 }
