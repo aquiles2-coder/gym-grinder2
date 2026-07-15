@@ -14,14 +14,14 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('main-game').style.display = 'block';
       await loadUserData(user.uid);
       setupWorkoutListeners();
-      loadLeaderboards();
-      setupLogout();
+      loadLeaderboards(); 
+      setupLogout();           // Make sure this is here
     } else {
       document.getElementById('auth-section').style.display = 'block';
       document.getElementById('main-game').style.display = 'none';
     }
   });
-});
+  setupLogout();
 
 function populateExercises() {
   const select = document.getElementById('exercise-select');
