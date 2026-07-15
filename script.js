@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   populateExercises();
   setupAuthListeners();
+  setupLogout();   // Always setup logout button
 
   auth.onAuthStateChanged(async (user) => {
     if (user) {
@@ -14,14 +15,13 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('main-game').style.display = 'block';
       await loadUserData(user.uid);
       setupWorkoutListeners();
-      loadLeaderboards(); 
-      setupLogout();           // Make sure this is here
+      loadLeaderboards();
     } else {
       document.getElementById('auth-section').style.display = 'block';
       document.getElementById('main-game').style.display = 'none';
     }
   });
-
+});
 
 function populateExercises() {
   const select = document.getElementById('exercise-select');
@@ -59,11 +59,11 @@ async function handleAuth() {
           level: 1,
           xp: 0,
           strength: 10,
-          approved: true,           // ← Set to true for easier testing
+          approved: true,
           dailyXP: 0,
           weeklyXP: 0
         });
-        alert("Account created!");
+        alert("Account created successfully!");
       } else {
         throw e;
       }
@@ -77,9 +77,16 @@ async function loadUserData(uid) {
   const doc = await db.collection('users').doc(uid).get();
   if (doc.exists) {
     const data = doc.data();
-    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${data.level * 100} | Strength: ${data.strength}`;
+    const nextXP = (data.level || 1) * 100 + calculateCumulativeXP(data.level || 1);
+    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${nextXP} | Strength: ${data.strength}`;
     document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
   }
+}
+
+function calculateCumulativeXP(level) {
+  let total = 0;
+  for (let i = 1; i < level; i++) total += i * 100;
+  return total;
 }
 
 function setupWorkoutListeners() {
@@ -87,6 +94,7 @@ function setupWorkoutListeners() {
 }
 
 async function logWorkout() {
+  // ... (same as previous version)
   const exercise = document.getElementById('exercise-select').value;
   const weight = parseFloat(document.getElementById('weight').value);
   const reps = parseInt(document.getElementById('reps').value);
@@ -104,18 +112,10 @@ async function logWorkout() {
     const doc = await userRef.get();
     const data = doc.data();
 
-    let currentXP = data.xp || 0;
-    let currentLevel = data.level || 1;
+    let newXP = (data.xp || 0) + xpGain;
+    let newLevel = data.level || 1;
 
-    let newXP = currentXP + xpGain;
-    let newLevel = currentLevel;
-
-    // Calculate required XP for next level
-    while (true) {
-      const xpNeededForNextLevel = newLevel * 100;
-      if (newXP < (calculateCumulativeXP(newLevel) + xpNeededForNextLevel)) {
-        break;
-      }
+    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
       newLevel++;
     }
 
@@ -130,72 +130,34 @@ async function logWorkout() {
     document.getElementById('log-message').innerHTML = `✅ +${xpGain} XP from ${exercise}!`;
     await loadUserData(currentUser.uid);
     loadLeaderboards();
-
   } catch (error) {
-    console.error("Workout error:", error);
+    console.error(error);
     alert("Error saving workout.");
   }
 }
 
-// Helper function for cumulative XP
-function calculateCumulativeXP(level) {
-  let total = 0;
-  for (let i = 1; i < level; i++) {
-    total += i * 100;
-  }
-  return total;
-}
-
-// Also update loadUserData to show correct next level XP
-async function loadUserData(uid) {
-  const doc = await db.collection('users').doc(uid).get();
-  if (doc.exists) {
-    const data = doc.data();
-    const nextLevelXP = calculateCumulativeXP(data.level) + (data.level * 100);
-    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp}/${nextLevelXP} | Strength: ${data.strength}`;
-    document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
-  }
-}
-
-// Leaderboards
 async function loadLeaderboards() {
   try {
     const globalSnap = await db.collection('users').orderBy('level', 'desc').limit(20).get();
     let html = "<h3>🌍 Global Top 20</h3><ol>";
     globalSnap.forEach(doc => {
       const d = doc.data();
-      html += `<li>${d.nickname} — Level ${d.level} (${d.xp} XP)</li>`;
+      html += `<li>${d.nickname} — Lvl ${d.level}</li>`;
     });
     html += "</ol>";
     document.getElementById('global-lb').innerHTML = html;
-
-    const dailySnap = await db.collection('users').orderBy('dailyXP', 'desc').limit(10).get();
-    let dailyHTML = "<h3>📅 Daily Top 10</h3><ol>";
-    dailySnap.forEach(doc => {
-      const d = doc.data();
-      dailyHTML += `<li>${d.nickname} — ${d.dailyXP} XP</li>`;
-    });
-    dailyHTML += "</ol>";
-    if (document.getElementById('daily-lb')) document.getElementById('daily-lb').innerHTML = dailyHTML;
-
   } catch (e) {
-    console.error("Leaderboard error:", e);
-  }
-
-  // Logout functionality
-function setupLogout() {
-  const logoutBtn = document.getElementById('logout-btn');
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', async () => {
-      if (confirm("Are you sure you want to logout?")) {
-        await auth.signOut();
-        alert("Logged out successfully.");
-      }
-    });
+    console.error(e);
   }
 }
 
-// Call it after auth state change
-// Add this line inside onAuthStateChanged, after setupWorkoutListeners():
-setupLogout();
+function setupLogout() {
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+      if (confirm("Logout?")) {
+        auth.signOut();
+      }
+    });
+  }
 }
