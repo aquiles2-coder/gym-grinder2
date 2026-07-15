@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('main-game').style.display = 'none';
     }
   });
-  setupLogout();
+
 
 function populateExercises() {
   const select = document.getElementById('exercise-select');
