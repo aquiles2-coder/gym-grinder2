@@ -482,8 +482,8 @@ async function logWorkout() {
 }
 
 async function loadLeaderboards() {
+  // ── Global (by Level) ───────────────────────────────────
   try {
-    // ── Global ──────────────────────────────────────────────
     const globalSnap = await db.collection('users').orderBy('level', 'desc').limit(20).get();
     let html = '<h3>🌍 Global Top 20</h3><ol>';
     globalSnap.forEach(doc => {
@@ -493,18 +493,20 @@ async function loadLeaderboards() {
     html += '</ol>';
     const globalLb = document.getElementById('global-lb');
     if (globalLb) globalLb.innerHTML = html;
+  } catch (e) {
+    console.error('Global leaderboard error:', e);
+  }
 
-    // ── Daily ───────────────────────────────────────────────
-    const today = getTodayString();
+  // ── Daily (by highest dailyXP) ──────────────────────────
+  try {
     const dailySnap = await db.collection('users')
-      .where('lastDailyReset', '==', today)
       .orderBy('dailyXP', 'desc')
       .limit(10)
       .get();
 
-    let dailyHTML = '<h3>📅 Daily Top 10 (XP earned today)</h3><ol>';
+    let dailyHTML = '<h3>📅 Daily Top 10</h3><ol>';
     if (dailySnap.empty) {
-      dailyHTML += '<li>No workouts logged today yet</li>';
+      dailyHTML += '<li>No data yet</li>';
     } else {
       dailySnap.forEach(doc => {
         const d = doc.data();
@@ -514,18 +516,20 @@ async function loadLeaderboards() {
     dailyHTML += '</ol>';
     const dailyLb = document.getElementById('daily-lb');
     if (dailyLb) dailyLb.innerHTML = dailyHTML;
+  } catch (e) {
+    console.error('Daily leaderboard error:', e);
+  }
 
-    // ── Weekly ──────────────────────────────────────────────
-    const weekStart = getWeekStartString();
+  // ── Weekly (by highest weeklyXP) ────────────────────────
+  try {
     const weeklySnap = await db.collection('users')
-      .where('lastWeeklyReset', '==', weekStart)
       .orderBy('weeklyXP', 'desc')
       .limit(10)
       .get();
 
-    let weeklyHTML = '<h3>📆 Weekly Top 10 (XP earned this week)</h3><ol>';
+    let weeklyHTML = '<h3>📆 Weekly Top 10</h3><ol>';
     if (weeklySnap.empty) {
-      weeklyHTML += '<li>No workouts logged this week yet</li>';
+      weeklyHTML += '<li>No data yet</li>';
     } else {
       weeklySnap.forEach(doc => {
         const d = doc.data();
@@ -535,9 +539,7 @@ async function loadLeaderboards() {
     weeklyHTML += '</ol>';
     const weeklyLb = document.getElementById('weekly-lb');
     if (weeklyLb) weeklyLb.innerHTML = weeklyHTML;
-
   } catch (e) {
-    console.error('Leaderboard error:', e);
-    // If a composite index is missing, Firebase will log a link to create it
+    console.error('Weekly leaderboard error:', e);
   }
 }
