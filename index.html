@@ -28,7 +28,15 @@
     </div>
 
     <div id="main-game" style="display: none;">
-      <section id="workout">
+      <!-- Navigation tabs -->
+      <nav class="nav-tabs">
+        <button class="tab-btn active" data-tab="workout">Workout</button>
+        <button class="tab-btn" data-tab="profile">Profile</button>
+        <button class="tab-btn" data-tab="leaderboards">Leaderboards</button>
+      </nav>
+
+      <!-- Workout section -->
+      <section id="workout" class="tab-content active">
         <h2>Log Workout</h2>
         <select id="exercise-select"></select><br><br>
         <input type="number" id="weight" placeholder="Weight (kg)" step="0.5">
@@ -37,9 +45,20 @@
         <p id="log-message"></p>
       </section>
 
-      <section id="leaderboards">
+      <!-- Profile section -->
+      <section id="profile" class="tab-content" style="display: none;">
+        <h2>👤 Your Profile</h2>
+        <div id="profile-header" class="stats"></div>
+        <h3>Muscle Progress</h3>
+        <p class="hint">Each exercise distributes XP to the muscles it works.</p>
+        <div id="muscle-grid" class="muscle-grid"></div>
+      </section>
+
+      <!-- Leaderboards section -->
+      <section id="leaderboards" class="tab-content" style="display: none;">
         <h2>Leaderboards</h2>
         <div id="global-lb" class="stats"></div>
+        <div id="daily-lb" class="stats"></div>
       </section>
     </div>
   </div>
