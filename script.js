@@ -36,11 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('pending-section').style.display = 'block';
         document.getElementById('user-info').innerHTML = `Welcome, ${doc.exists ? doc.data().nickname : 'User'}`;
       }
-    } else {
-      document.getElementById('auth-section').style.display = 'block';
-      document.getElementById('main-game').style.display = 'none';
-      document.getElementById('pending-section').style.display = 'none';
-      document.getElementById('logout-btn').style.display = 'none';
     }
   });
 });
