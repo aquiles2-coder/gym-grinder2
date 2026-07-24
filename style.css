@@ -248,11 +248,15 @@ select:focus, input[type="number"]:focus {
 }
 
 /* Leaderboard lists */
-#global-lb ol, #daily-lb ol {
+#global-lb ol, #daily-lb ol, #weekly-lb ol {
   text-align: left;
   max-width: 400px;
   margin: 10px auto;
   padding-left: 30px;
+}
+
+#global-lb li, #daily-lb li, #weekly-lb li {
+  margin: 6px 0;
 }
 
 #global-lb li, #daily-lb li {
