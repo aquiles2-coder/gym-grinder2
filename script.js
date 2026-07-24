@@ -60,24 +60,24 @@ function hide(id) {
 
 // Classification values (factors) from the table – higher = more XP per kg×reps
 const exerciseFactors = {
-  "Lateral Raise": 1.00,
-  "Biceps Curl": 0.76,
-  "Hammer Curl": 0.70,
-  "Chest Fly": 0.70,
-  "Lying Triceps Extension": 0.38,
-  "Push Ups": 0.32,
-  "Push-down": 0.29,
-  "Shoulder Press": 0.26,
-  "Leg Curl": 0.25,
-  "Pull-down": 0.19,
-  "Bent-over Row": 0.18,
-  "Bench Press": 0.17,
-  "Leg Extension": 0.16,
-  "Pull Ups": 0.15,
-  "Dip": 0.13,
-  "Deadlift": 0.10,
-  "Squat": 0.076,
-  "Leg Press": 0.07
+  "Lateral Raise 1 arm": 1.00,
+  "Biceps Curl 1 arm": 0.76,
+  "Hammer Curl 1 arm": 0.70,
+  "Chest Fly 1 arm": 0.70,
+  "Lying Triceps Extension 2 arms": 0.38,
+  "Push-down 2 arms": 0.29,
+  "Shoulder Press 2 arms": 0.26,
+  "Leg Curl 2 legs": 0.25,
+  "Pull-down 2 arms": 0.19,
+  "Bent-over Row 2 arms": 0.18,
+  "Bench Press 2 arms": 0.17,
+  "Leg Extension 2 legs": 0.16,
+  "Pull Ups bodyweight": 0.15,
+  "Dip bodyweight": 0.13,
+  "Push Ups bodywiegth": 0.106,
+  "Deadlift 2 arms": 0.10,
+  "Squat bodyweight": 0.076,
+  "Leg Press 2 legs": 0.07
   
 };
 
