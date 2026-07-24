@@ -76,6 +76,7 @@ const exerciseFactors = {
   "Pull Ups": 0.15,
   "Dip": 0.13,
   "Deadlift": 0.10,
+  "Squat": 0.076,
   "Leg Press": 0.07
   
 };
