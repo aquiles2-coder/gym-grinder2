@@ -1,20 +1,77 @@
 body {
   font-family: Arial, sans-serif;
-  background: #111111;
+  background: #0a0a0a;
   color: #00ff00;
   text-align: center;
   margin: 0;
   padding: 20px;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Epic warrior background with seamless breathing animation */
+.background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url('background.jpg');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  z-index: -2;
+  /* Precise seamless breathing loop – scale returns exactly to start */
+  animation: breathe 5s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* Dark overlay so text stays readable and green/yellow theme pops */
+.background::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.70) 50%,
+    rgba(0, 0, 0, 0.80) 100%
+  );
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* 
+  Breathing keyframes:
+  - Starts and ends at exactly scale(1) → no jump on loop
+  - Gentle 3% expansion feels like chest rising / falling
+  - ease-in-out makes the motion natural and continuous
+*/
+@keyframes breathe {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .game {
   max-width: 600px;
   margin: 0 auto;
+  position: relative;
+  z-index: 1;
 }
 
 h1 {
   color: #ffff00;
   font-size: 36px;
+  text-shadow: 0 0 12px rgba(255, 255, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
 button {
@@ -26,23 +83,33 @@ button {
   border: none;
   border-radius: 10px;
   cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: background 0.2s, transform 0.15s;
 }
 
 button:hover {
   background: #ffff00;
   color: black;
+  transform: scale(1.05);
 }
 
 .stats {
   font-size: 20px;
-  background: #222222;
+  background: rgba(20, 20, 20, 0.85);
   padding: 15px;
   border-radius: 8px;
   margin: 15px auto;
   max-width: 500px;
+  border: 1px solid rgba(0, 255, 0, 0.25);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 progress {
+  width: 80%;
+  height: 20px;
+}
+
   width: 80%;
   height: 20px;
 }
