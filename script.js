@@ -6,20 +6,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   populateExercises();
   setupAuthListeners();
-
-  auth.onAuthStateChanged(async (user) => {
-    if (user) {
-      currentUser = user;
-      document.getElementById('auth-section').style.display = 'none';
-      document.getElementById('main-game').style.display = 'block';
-      await loadUserData(user.uid);
-      setupWorkoutListeners();
-      loadLeaderboards();
-    } else {
-      document.getElementById('auth-section').style.display = 'block';
-      document.getElementById('main-game').style.display = 'none';
-    }
-  });
+  setupLogout();
+  
+auth.onAuthStateChanged(async (user) => {
+  if (user) {
+    currentUser = user;
+    document.getElementById('auth-section').style.display = 'none';
+    document.getElementById('main-game').style.display = 'block';
+    document.getElementById('logout-btn').style.display = 'inline-block'; // show logout
+    await loadUserData(user.uid);
+    setupWorkoutListeners();
+    loadLeaderboards();
+  } else {
+    document.getElementById('auth-section').style.display = 'block';
+    document.getElementById('main-game').style.display = 'none';
+    document.getElementById('logout-btn').style.display = 'none'; // hide logout
+  }
+});
 });
 
 function populateExercises() {
@@ -35,6 +38,17 @@ function populateExercises() {
 
 function setupAuthListeners() {
   document.getElementById('show-auth-btn').addEventListener('click', handleAuth);
+}
+
+function setupLogout() {
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    try {
+      await auth.signOut();
+      alert("Logged out successfully!");
+    } catch (error) {
+      alert("Error logging out: " + error.message);
+    }
+  });
 }
 
 async function handleAuth() {
