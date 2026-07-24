@@ -64,6 +64,16 @@ h1 {
   text-shadow: 0 0 12px rgba(255, 255, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
+h2 {
+  color: #ffff00;
+  text-shadow: 0 0 8px rgba(255, 255, 0, 0.4);
+}
+
+h3 {
+  color: #00ff88;
+  margin-top: 20px;
+}
+
 button {
   font-size: 24px;
   padding: 15px 30px;
@@ -98,4 +108,153 @@ button:hover {
 progress {
   width: 80%;
   height: 20px;
+}
+
+/* ─── Navigation tabs ─────────────────────────────────────── */
+.nav-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 15px 0 20px;
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  font-size: 16px;
+  padding: 10px 18px;
+  margin: 0;
+  background: rgba(40, 40, 40, 0.85);
+  color: #00ff00;
+  border: 1px solid rgba(0, 255, 0, 0.35);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, transform 0.15s;
+}
+
+.tab-btn:hover {
+  background: rgba(0, 80, 0, 0.7);
+  color: #ffff00;
+  transform: scale(1.04);
+}
+
+.tab-btn.active {
+  background: #ff0000;
+  color: white;
+  border-color: #ff0000;
+  box-shadow: 0 0 12px rgba(255, 0, 0, 0.5);
+}
+
+.tab-btn.active:hover {
+  background: #ffff00;
+  color: black;
+  border-color: #ffff00;
+}
+
+/* ─── Profile / Muscle grid ───────────────────────────────── */
+.hint {
+  font-size: 14px;
+  color: #88ff88;
+  opacity: 0.85;
+  margin: -8px 0 16px;
+}
+
+.muscle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  max-width: 540px;
+  margin: 0 auto 30px;
+}
+
+.muscle-card {
+  background: rgba(10, 10, 10, 0.7);
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  border-radius: 10px;
+  padding: 12px 10px;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s, border-color 0.2s;
+}
+
+.muscle-card:hover {
+  transform: scale(1.04);
+  border-color: #ffff00;
+}
+
+.muscle-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffff00;
+  margin-bottom: 4px;
+}
+
+.muscle-level {
+  font-size: 18px;
+  color: #00ff00;
+  margin-bottom: 2px;
+}
+
+.muscle-xp {
+  font-size: 13px;
+  color: #88ff88;
+  margin-bottom: 8px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  background: rgba(0, 40, 0, 0.8);
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 255, 0, 0.25);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00aa00, #00ff00);
+  border-radius: 5px;
+  transition: width 0.4s ease;
+}
+
+.muscle-next {
+  font-size: 11px;
+  color: #66aa66;
+  margin-top: 4px;
+}
+
+/* Muscle gains message under workout log */
+.muscle-gains {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  color: #88ff88;
+}
+
+/* Inputs */
+select, input[type="number"] {
+  font-size: 18px;
+  padding: 10px 14px;
+  margin: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 0, 0.4);
+  background: rgba(20, 20, 20, 0.85);
+  color: #00ff00;
+  outline: none;
+}
+
+select:focus, input[type="number"]:focus {
+  border-color: #ffff00;
+  box-shadow: 0 0 8px rgba(255, 255, 0, 0.3);
+}
+
+/* Leaderboard lists */
+#global-lb ol, #daily-lb ol {
+  text-align: left;
+  max-width: 400px;
+  margin: 10px auto;
+  padding-left: 30px;
+}
+
+#global-lb li, #daily-lb li {
+  margin: 6px 0;
 }
