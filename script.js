@@ -7,22 +7,22 @@ document.addEventListener('DOMContentLoaded', () => {
   populateExercises();
   setupAuthListeners();
   setupLogout();
-  
-auth.onAuthStateChanged(async (user) => {
-  if (user) {
-    currentUser = user;
-    document.getElementById('auth-section').style.display = 'none';
-    document.getElementById('main-game').style.display = 'block';
-    document.getElementById('logout-btn').style.display = 'inline-block'; // show logout
-    await loadUserData(user.uid);
-    setupWorkoutListeners();
-    loadLeaderboards();
-  } else {
-    document.getElementById('auth-section').style.display = 'block';
-    document.getElementById('main-game').style.display = 'none';
-    document.getElementById('logout-btn').style.display = 'none'; // hide logout
-  }
-});
+
+  auth.onAuthStateChanged(async (user) => {
+    if (user) {
+      currentUser = user;
+      document.getElementById('auth-section').style.display = 'none';
+      document.getElementById('main-game').style.display = 'block';
+      document.getElementById('logout-btn').style.display = 'inline-block';
+      await loadUserData(user.uid);
+      setupWorkoutListeners();
+      loadLeaderboards();
+    } else {
+      document.getElementById('auth-section').style.display = 'block';
+      document.getElementById('main-game').style.display = 'none';
+      document.getElementById('logout-btn').style.display = 'none';
+    }
+  });
 });
 
 function populateExercises() {
