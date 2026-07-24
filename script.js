@@ -1,5 +1,6 @@
 let db, auth, currentUser = null;
 let workoutListenerAttached = false;
+let tabsListenerAttached = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   // Safety check: Firebase must be loaded
@@ -21,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
   populateExercises();
   setupAuthListeners();
   setupLogout();
+  setupTabs();
 
   auth.onAuthStateChanged(async (user) => {
     if (user) {
@@ -56,6 +58,40 @@ function show(id, display = 'block') {
 function hide(id) {
   const el = document.getElementById(id);
   if (el) el.style.display = 'none';
+}
+
+// ─── Muscle system ───────────────────────────────────────────
+const ALL_MUSCLES = [
+  "Chest", "Back", "Shoulders", "Biceps", "Triceps",
+  "Forearms", "Core", "Quads", "Hamstrings", "Glutes", "Calves"
+];
+
+// Percentage of XP that goes to each muscle (must sum to 100)
+const exerciseMuscles = {
+  "Lateral Raise 1 arm":            { Shoulders: 90, Forearms: 10 },
+  "Biceps Curl 1 arm":              { Biceps: 85, Forearms: 15 },
+  "Hammer Curl 1 arm":              { Biceps: 60, Forearms: 40 },
+  "Chest Fly 1 arm":                { Chest: 90, Shoulders: 10 },
+  "Lying Triceps Extension 2 arms": { Triceps: 90, Forearms: 10 },
+  "Push-down 2 arms":               { Triceps: 85, Forearms: 15 },
+  "Shoulder Press 2 arms":          { Shoulders: 70, Triceps: 20, Chest: 10 },
+  "Leg Curl 2 legs":                { Hamstrings: 85, Calves: 15 },
+  "Pull-down 2 arms":               { Back: 75, Biceps: 20, Forearms: 5 },
+  "Bent-over Row 2 arms":           { Back: 70, Biceps: 15, Shoulders: 10, Forearms: 5 },
+  "Bench Press 2 arms":             { Chest: 55, Triceps: 25, Shoulders: 20 },
+  "Leg Extension 2 legs":           { Quads: 90, Core: 10 },
+  "Pull Ups bodyweight":            { Back: 60, Biceps: 25, Forearms: 10, Core: 5 },
+  "Dip bodyweight":                 { Chest: 40, Triceps: 40, Shoulders: 15, Core: 5 },
+  "Push Ups bodyweight":            { Chest: 50, Triceps: 25, Shoulders: 15, Core: 10 },
+  "Deadlift 2 arms":                { Back: 35, Hamstrings: 25, Glutes: 25, Quads: 10, Core: 5 },
+  "Squat bodyweight":               { Quads: 40, Glutes: 30, Hamstrings: 15, Core: 10, Calves: 5 },
+  "Leg Press 2 legs":               { Quads: 50, Glutes: 30, Hamstrings: 15, Calves: 5 }
+};
+
+function emptyMuscles() {
+  const m = {};
+  ALL_MUSCLES.forEach(name => m[name] = 0);
+  return m;
 }
 
 // Classification values (factors) from the table – higher = more XP per kg×reps
@@ -129,6 +165,39 @@ function setupLogout() {
   }
 }
 
+function setupTabs() {
+  if (tabsListenerAttached) return;
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+
+      // Update buttons
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      // Update content
+      document.querySelectorAll('.tab-content').forEach(sec => {
+        sec.style.display = 'none';
+        sec.classList.remove('active');
+      });
+      const target = document.getElementById(tab);
+      if (target) {
+        target.style.display = 'block';
+        target.classList.add('active');
+      }
+
+      // Refresh profile when switching to it
+      if (tab === 'profile' && currentUser) {
+        loadProfile(currentUser.uid);
+      }
+      if (tab === 'leaderboards') {
+        loadLeaderboards();
+      }
+    });
+  });
+  tabsListenerAttached = true;
+}
+
 async function handleLogin() {
   const nickname = prompt('Enter Nickname:');
   if (!nickname) return;
@@ -177,7 +246,8 @@ async function handleRegister() {
       strength: 10,
       approved: true,
       dailyXP: 0,
-      weeklyXP: 0
+      weeklyXP: 0,
+      muscles: emptyMuscles()
     });
     alert('✅ Account created successfully! You are now logged in.');
   } catch (error) {
@@ -203,6 +273,11 @@ async function loadUserData(uid) {
       if (userInfoEl) {
         userInfoEl.innerHTML = `Welcome, ${data.nickname}`;
       }
+
+      // Ensure muscles object exists for older accounts
+      if (!data.muscles) {
+        await db.collection('users').doc(uid).update({ muscles: emptyMuscles() });
+      }
     }
   } catch (e) {
     console.error('loadUserData error:', e);
@@ -213,6 +288,65 @@ function calculateCumulativeXP(level) {
   let total = 0;
   for (let i = 1; i < level; i++) total += i * 100;
   return total;
+}
+
+function muscleLevel(xp) {
+  // Simple level: every 100 XP = 1 muscle level
+  return Math.floor((xp || 0) / 100) + 1;
+}
+
+function muscleProgress(xp) {
+  // Progress toward next muscle level (0–100)
+  return ((xp || 0) % 100);
+}
+
+async function loadProfile(uid) {
+  try {
+    const doc = await db.collection('users').doc(uid).get();
+    if (!doc.exists) return;
+
+    const data = doc.data();
+    const muscles = data.muscles || emptyMuscles();
+    const nextLevelXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 100;
+
+    // Header
+    const header = document.getElementById('profile-header');
+    if (header) {
+      header.innerHTML = `
+        <strong>${data.nickname}</strong><br>
+        Level ${data.level} · ${data.xp || 0} / ${nextLevelXP} XP · Strength ${data.strength || 10}
+      `;
+    }
+
+    // Muscle grid
+    const grid = document.getElementById('muscle-grid');
+    if (!grid) return;
+
+    // Sort by XP descending so strongest muscles appear first
+    const sorted = ALL_MUSCLES
+      .map(name => ({ name, xp: muscles[name] || 0 }))
+      .sort((a, b) => b.xp - a.xp);
+
+    let html = '';
+    sorted.forEach(({ name, xp }) => {
+      const lvl = muscleLevel(xp);
+      const prog = muscleProgress(xp);
+      html += `
+        <div class="muscle-card">
+          <div class="muscle-name">${name}</div>
+          <div class="muscle-level">Lv ${lvl}</div>
+          <div class="muscle-xp">${xp} XP</div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: ${prog}%"></div>
+          </div>
+          <div class="muscle-next">${prog}/100 to next</div>
+        </div>
+      `;
+    });
+    grid.innerHTML = html;
+  } catch (e) {
+    console.error('loadProfile error:', e);
+  }
 }
 
 function setupWorkoutListeners() {
@@ -237,6 +371,13 @@ async function logWorkout() {
   const factor = exerciseFactors[exercise] ?? 0.1;  // fallback if somehow missing
   const xpGain = Math.floor(weight * reps * factor);
 
+  // Muscle distribution for this exercise
+  const muscleMap = exerciseMuscles[exercise] || {};
+  const muscleGains = {};
+  for (const [muscle, pct] of Object.entries(muscleMap)) {
+    muscleGains[muscle] = Math.floor(xpGain * (pct / 100));
+  }
+
   try {
     const userRef = db.collection('users').doc(currentUser.uid);
     const doc = await userRef.get();
@@ -249,16 +390,32 @@ async function logWorkout() {
       newLevel++;
     }
 
+    // Merge muscle XP
+    const currentMuscles = data.muscles || emptyMuscles();
+    const updatedMuscles = { ...currentMuscles };
+    for (const [muscle, gain] of Object.entries(muscleGains)) {
+      updatedMuscles[muscle] = (updatedMuscles[muscle] || 0) + gain;
+    }
+
     await userRef.update({
       xp: newXP,
       level: newLevel,
       strength: Math.floor((data.strength || 10) + (xpGain / 30)),
       dailyXP: (data.dailyXP || 0) + xpGain,
-      weeklyXP: (data.weeklyXP || 0) + xpGain
+      weeklyXP: (data.weeklyXP || 0) + xpGain,
+      muscles: updatedMuscles
     });
 
+    // Build nice message showing muscle gains
+    let muscleMsg = Object.entries(muscleGains)
+      .filter(([, g]) => g > 0)
+      .map(([m, g]) => `${m} +${g}`)
+      .join(', ');
+
     const logMsg = document.getElementById('log-message');
-    if (logMsg) logMsg.innerHTML = `✅ +${xpGain} XP from ${exercise}!`;
+    if (logMsg) {
+      logMsg.innerHTML = `✅ +${xpGain} XP from ${exercise}!<br><span class="muscle-gains">${muscleMsg}</span>`;
+    }
     await loadUserData(currentUser.uid);
     loadLeaderboards();
 
@@ -284,7 +441,7 @@ async function loadLeaderboards() {
     let dailyHTML = '<h3>📅 Daily Top 10</h3><ol>';
     dailySnap.forEach(doc => {
       const d = doc.data();
-      dailyHTML += `<li>${d.nickname} — ${d.dailyXP} XP</li>`;
+      dailyHTML += `<li>${d.nickname} — ${d.dailyXP || 0} XP</li>`;
     });
     dailyHTML += '</ol>';
     const dailyLb = document.getElementById('daily-lb');
@@ -294,3 +451,4 @@ async function loadLeaderboards() {
     console.error('Leaderboard error:', e);
   }
 }
+
