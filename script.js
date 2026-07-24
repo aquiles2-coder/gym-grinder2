@@ -58,6 +58,28 @@ function hide(id) {
   if (el) el.style.display = 'none';
 }
 
+// Classification values (factors) from the table – higher = more XP per kg×reps
+const exerciseFactors = {
+  "Lateral Raise": 1.00,
+  "Biceps Curl": 0.76,
+  "Hammer Curl": 0.70,
+  "Chest Fly": 0.70,
+  "Lying Triceps Extension": 0.38,
+  "Push Ups": 0.32,
+  "Push-down": 0.29,
+  "Shoulder Press": 0.26,
+  "Leg Curl": 0.25,
+  "Pull-down": 0.19,
+  "Bent-over Row": 0.18,
+  "Bench Press": 0.17,
+  "Leg Extension": 0.16,
+  "Pull Ups": 0.15,
+  "Dip": 0.13,
+  "Deadlift": 0.10,
+  "Leg Press": 0.07
+  
+};
+
 function populateExercises() {
   const select = document.getElementById('exercise-select');
   if (!select) return;
@@ -65,12 +87,7 @@ function populateExercises() {
   // Avoid duplicating options on re-runs
   if (select.options.length > 0) return;
 
-  const exercises = [
-    "Bench Press", "Pull Ups", "Push Ups", "Deadlift", "Leg Press",
-    "Leg Extension", "Leg Curl", "Chest Fly", "Pull-down", "Bent-over Row",
-    "Shoulder Press", "Lateral Raise", "Push-down", "Lying Triceps Extension",
-    "Dip", "Biceps Curl", "Hammer Curl"
-  ];
+  const exercises = Object.keys(exerciseFactors);
   exercises.forEach(ex => {
     const opt = document.createElement('option');
     opt.value = ex;
@@ -217,7 +234,7 @@ async function logWorkout() {
     return;
   }
 
-  const factor = 0.1;
+  const factor = exerciseFactors[exercise] ?? 0.1;  // fallback if somehow missing
   const xpGain = Math.floor(weight * reps * factor);
 
   try {
