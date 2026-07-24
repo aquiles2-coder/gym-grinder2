@@ -12,14 +12,26 @@ document.addEventListener('DOMContentLoaded', () => {
     if (user) {
       currentUser = user;
       document.getElementById('auth-section').style.display = 'none';
-      document.getElementById('main-game').style.display = 'block';
       document.getElementById('logout-btn').style.display = 'inline-block';
-      await loadUserData(user.uid);
-      setupWorkoutListeners();
-      loadLeaderboards();
+
+      const doc = await db.collection('users').doc(user.uid).get();
+      if (doc.exists && doc.data().approved === true) {
+        // Approved → show the game
+        document.getElementById('pending-section').style.display = 'none';
+        document.getElementById('main-game').style.display = 'block';
+        await loadUserData(user.uid);
+        setupWorkoutListeners();
+        loadLeaderboards();
+      } else {
+        // Not approved yet → show waiting message
+        document.getElementById('main-game').style.display = 'none';
+        document.getElementById('pending-section').style.display = 'block';
+        document.getElementById('user-info').innerHTML = `Welcome, ${doc.exists ? doc.data().nickname : 'User'}`;
+      }
     } else {
       document.getElementById('auth-section').style.display = 'block';
       document.getElementById('main-game').style.display = 'none';
+      document.getElementById('pending-section').style.display = 'none';
       document.getElementById('logout-btn').style.display = 'none';
     }
   });
@@ -37,7 +49,8 @@ function populateExercises() {
 }
 
 function setupAuthListeners() {
-  document.getElementById('show-auth-btn').addEventListener('click', handleAuth);
+  document.getElementById('login-btn').addEventListener('click', handleLogin);
+  document.getElementById('register-btn').addEventListener('click', handleRegister);
 }
 
 function setupLogout() {
@@ -51,39 +64,63 @@ function setupLogout() {
   });
 }
 
-async function handleAuth() {
+async function handleLogin() {
   const nickname = prompt("Enter Nickname:");
   if (!nickname) return;
 
-  const password = prompt("Enter Password (min 4 chars):");
-  if (password.length < 4) return alert("Password too short!");
+  const password = prompt("Enter Password:");
+  if (!password) return;
 
   const email = `${nickname.toLowerCase().replace(/\s+/g, '')}@gymgrinder.app`;
 
   try {
-    let userCred;
-    try {
-      userCred = await auth.signInWithEmailAndPassword(email, password);
-      alert("✅ Login successful!");
-    } catch (e) {
-      if (e.code === 'auth/user-not-found') {
-        userCred = await auth.createUserWithEmailAndPassword(email, password);
-        await db.collection('users').doc(userCred.user.uid).set({
-          nickname: nickname,
-          level: 1,
-          xp: 0,
-          strength: 10,
-          approved: true,
-          dailyXP: 0,
-          weeklyXP: 0
-        });
-        alert("✅ Account created successfully!");
-      } else {
-        alert("Error: " + e.message);
-      }
-    }
+    await auth.signInWithEmailAndPassword(email, password);
+    alert("✅ Login successful!");
   } catch (error) {
-    alert("Something went wrong: " + error.message);
+    if (error.code === 'auth/user-not-found') {
+      alert("Account not found. Please Register first.");
+    } else if (error.code === 'auth/wrong-password') {
+      alert("Wrong password.");
+    } else {
+      alert("Login error: " + error.message);
+    }
+  }
+}
+
+async function handleRegister() {
+  const nickname = prompt("Choose a Nickname:");
+  if (!nickname) return;
+
+  const password = prompt("Choose a Password (min 4 chars):");
+  if (!password || password.length < 4) {
+    return alert("Password must be at least 4 characters!");
+  }
+
+  const confirmPassword = prompt("Confirm Password:");
+  if (password !== confirmPassword) {
+    return alert("Passwords do not match!");
+  }
+
+  const email = `${nickname.toLowerCase().replace(/\s+/g, '')}@gymgrinder.app`;
+
+  try {
+    const userCred = await auth.createUserWithEmailAndPassword(email, password);
+    await db.collection('users').doc(userCred.user.uid).set({
+      nickname: nickname,
+      level: 1,
+      xp: 0,
+      strength: 10,
+      approved: false,   // Admin must approve in Firebase
+      dailyXP: 0,
+      weeklyXP: 0
+    });
+    alert("✅ Account created! Waiting for admin approval.");
+  } catch (error) {
+    if (error.code === 'auth/email-already-in-use') {
+      alert("This nickname is already taken. Please choose another one.");
+    } else {
+      alert("Registration error: " + error.message);
+    }
   }
 }
 
