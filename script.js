@@ -1,8 +1,22 @@
 let db, auth, currentUser = null;
+let workoutListenerAttached = false;
 
 document.addEventListener('DOMContentLoaded', () => {
-  auth = firebase.auth();
-  db = firebase.firestore();
+  // Safety check: Firebase must be loaded
+  if (typeof firebase === 'undefined') {
+    alert('Firebase failed to load. Check your internet connection and firebase-config.js');
+    console.error('Firebase is not defined');
+    return;
+  }
+
+  try {
+    auth = firebase.auth();
+    db = firebase.firestore();
+  } catch (e) {
+    alert('Error initializing Firebase: ' + e.message);
+    console.error(e);
+    return;
+  }
 
   populateExercises();
   setupAuthListeners();
@@ -11,38 +25,52 @@ document.addEventListener('DOMContentLoaded', () => {
   auth.onAuthStateChanged(async (user) => {
     if (user) {
       currentUser = user;
-      document.getElementById('auth-section').style.display = 'none';
-      document.getElementById('logout-btn').style.display = 'inline-block';
+      hide('auth-section');
+      hide('pending-section');
+      show('logout-btn', 'inline-block');
+      show('main-game', 'block');
 
-      const doc = await db.collection('users').doc(user.uid).get();
-      const data = doc.exists ? doc.data() : {};
-
-      // Only block if approved is explicitly false
-      if (data.approved === false) {
-        // Not approved yet → show waiting message
-        document.getElementById('main-game').style.display = 'none';
-        document.getElementById('pending-section').style.display = 'block';
-        document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname || 'User'}`;
-      } else {
-        // Approved (or old account without the field) → show the game
-        document.getElementById('pending-section').style.display = 'none';
-        document.getElementById('main-game').style.display = 'block';
+      try {
         await loadUserData(user.uid);
         setupWorkoutListeners();
         loadLeaderboards();
+      } catch (err) {
+        console.error('Error loading user data:', err);
+        setupWorkoutListeners();
       }
     } else {
-      document.getElementById('auth-section').style.display = 'block';
-      document.getElementById('main-game').style.display = 'none';
-      document.getElementById('pending-section').style.display = 'none';
-      document.getElementById('logout-btn').style.display = 'none';
+      currentUser = null;
+      show('auth-section', 'block');
+      hide('main-game');
+      hide('pending-section');
+      hide('logout-btn');
     }
   });
 });
 
+function show(id, display = 'block') {
+  const el = document.getElementById(id);
+  if (el) el.style.display = display;
+}
+
+function hide(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+}
+
 function populateExercises() {
   const select = document.getElementById('exercise-select');
-  const exercises = ["Bench Press","Pull Ups","Push Ups","Deadlift","Leg Press","Leg Extension","Leg Curl","Chest Fly","Pull-down","Bent-over Row","Shoulder Press","Lateral Raise","Push-down","Lying Triceps Extension","Dip","Biceps Curl","Hammer Curl"];
+  if (!select) return;
+
+  // Avoid duplicating options on re-runs
+  if (select.options.length > 0) return;
+
+  const exercises = [
+    "Bench Press", "Pull Ups", "Push Ups", "Deadlift", "Leg Press",
+    "Leg Extension", "Leg Curl", "Chest Fly", "Pull-down", "Bent-over Row",
+    "Shoulder Press", "Lateral Raise", "Push-down", "Lying Triceps Extension",
+    "Dip", "Biceps Curl", "Hammer Curl"
+  ];
   exercises.forEach(ex => {
     const opt = document.createElement('option');
     opt.value = ex;
@@ -52,56 +80,73 @@ function populateExercises() {
 }
 
 function setupAuthListeners() {
-  document.getElementById('login-btn').addEventListener('click', handleLogin);
-  document.getElementById('register-btn').addEventListener('click', handleRegister);
+  const loginBtn = document.getElementById('login-btn');
+  const registerBtn = document.getElementById('register-btn');
+
+  if (loginBtn) {
+    loginBtn.addEventListener('click', handleLogin);
+  } else {
+    console.error('login-btn not found in HTML');
+  }
+
+  if (registerBtn) {
+    registerBtn.addEventListener('click', handleRegister);
+  } else {
+    console.error('register-btn not found in HTML');
+  }
 }
 
 function setupLogout() {
-  document.getElementById('logout-btn').addEventListener('click', async () => {
-    try {
-      await auth.signOut();
-      alert("Logged out successfully!");
-    } catch (error) {
-      alert("Error logging out: " + error.message);
-    }
-  });
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      try {
+        await auth.signOut();
+        alert('Logged out successfully!');
+      } catch (error) {
+        alert('Error logging out: ' + error.message);
+      }
+    });
+  } else {
+    console.error('logout-btn not found in HTML');
+  }
 }
 
 async function handleLogin() {
-  const nickname = prompt("Enter Nickname:");
+  const nickname = prompt('Enter Nickname:');
   if (!nickname) return;
 
-  const password = prompt("Enter Password:");
+  const password = prompt('Enter Password:');
   if (!password) return;
 
   const email = `${nickname.toLowerCase().replace(/\s+/g, '')}@gymgrinder.app`;
 
   try {
     await auth.signInWithEmailAndPassword(email, password);
-    alert("✅ Login successful!");
+    alert('✅ Login successful!');
   } catch (error) {
-    if (error.code === 'auth/user-not-found') {
-      alert("Account not found. Please Register first.");
+    if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+      alert('Account not found or wrong password. Please Register first or check your details.');
     } else if (error.code === 'auth/wrong-password') {
-      alert("Wrong password.");
+      alert('Wrong password.');
     } else {
-      alert("Login error: " + error.message);
+      alert('Login error: ' + error.message);
     }
   }
 }
 
 async function handleRegister() {
-  const nickname = prompt("Choose a Nickname:");
+  const nickname = prompt('Choose a Nickname:');
   if (!nickname) return;
 
-  const password = prompt("Choose a Password (min 4 chars):");
+  const password = prompt('Choose a Password (min 4 chars):');
   if (!password || password.length < 4) {
-    return alert("Password must be at least 4 characters!");
+    return alert('Password must be at least 4 characters!');
   }
 
-  const confirmPassword = prompt("Confirm Password:");
+  const confirmPassword = prompt('Confirm Password:');
   if (password !== confirmPassword) {
-    return alert("Passwords do not match!");
+    return alert('Passwords do not match!');
   }
 
   const email = `${nickname.toLowerCase().replace(/\s+/g, '')}@gymgrinder.app`;
@@ -113,27 +158,37 @@ async function handleRegister() {
       level: 1,
       xp: 0,
       strength: 10,
-      approved: false,   // Admin must approve in Firebase
+      approved: true,
       dailyXP: 0,
       weeklyXP: 0
     });
-    alert("✅ Account created! Waiting for admin approval.");
+    alert('✅ Account created successfully! You are now logged in.');
   } catch (error) {
     if (error.code === 'auth/email-already-in-use') {
-      alert("This nickname is already taken. Please choose another one.");
+      alert('This nickname is already taken. Please choose another one.');
     } else {
-      alert("Registration error: " + error.message);
+      alert('Registration error: ' + error.message);
     }
   }
 }
 
 async function loadUserData(uid) {
-  const doc = await db.collection('users').doc(uid).get();
-  if (doc.exists) {
-    const data = doc.data();
-    const nextLevelXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 100;
-    document.getElementById('stats').innerHTML = `Level: ${data.level} | XP: ${data.xp || 0}/${nextLevelXP} | Strength: ${data.strength || 10}`;
-    document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname}`;
+  try {
+    const doc = await db.collection('users').doc(uid).get();
+    if (doc.exists) {
+      const data = doc.data();
+      const nextLevelXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 100;
+      const statsEl = document.getElementById('stats');
+      const userInfoEl = document.getElementById('user-info');
+      if (statsEl) {
+        statsEl.innerHTML = `Level: ${data.level} | XP: ${data.xp || 0}/${nextLevelXP} | Strength: ${data.strength || 10}`;
+      }
+      if (userInfoEl) {
+        userInfoEl.innerHTML = `Welcome, ${data.nickname}`;
+      }
+    }
+  } catch (e) {
+    console.error('loadUserData error:', e);
   }
 }
 
@@ -144,7 +199,12 @@ function calculateCumulativeXP(level) {
 }
 
 function setupWorkoutListeners() {
-  document.getElementById('confirm-btn').addEventListener('click', logWorkout);
+  if (workoutListenerAttached) return;
+  const btn = document.getElementById('confirm-btn');
+  if (btn) {
+    btn.addEventListener('click', logWorkout);
+    workoutListenerAttached = true;
+  }
 }
 
 async function logWorkout() {
@@ -153,7 +213,7 @@ async function logWorkout() {
   const reps = parseInt(document.getElementById('reps').value);
 
   if (isNaN(weight) || isNaN(reps) || reps < 1) {
-    alert("Please enter valid weight and reps!");
+    alert('Please enter valid weight and reps!');
     return;
   }
 
@@ -180,39 +240,40 @@ async function logWorkout() {
       weeklyXP: (data.weeklyXP || 0) + xpGain
     });
 
-    document.getElementById('log-message').innerHTML = `✅ +${xpGain} XP from ${exercise}!`;
+    const logMsg = document.getElementById('log-message');
+    if (logMsg) logMsg.innerHTML = `✅ +${xpGain} XP from ${exercise}!`;
     await loadUserData(currentUser.uid);
     loadLeaderboards();
 
   } catch (error) {
-    console.error("Workout error:", error);
-    alert("Error saving workout.");
+    console.error('Workout error:', error);
+    alert('Error saving workout.');
   }
 }
 
 async function loadLeaderboards() {
   try {
     const globalSnap = await db.collection('users').orderBy('level', 'desc').limit(20).get();
-    let html = "<h3>🌍 Global Top 20</h3><ol>";
+    let html = '<h3>🌍 Global Top 20</h3><ol>';
     globalSnap.forEach(doc => {
       const d = doc.data();
       html += `<li>${d.nickname} — Level ${d.level} (${d.xp} XP)</li>`;
     });
-    html += "</ol>";
-    document.getElementById('global-lb').innerHTML = html;
+    html += '</ol>';
+    const globalLb = document.getElementById('global-lb');
+    if (globalLb) globalLb.innerHTML = html;
 
     const dailySnap = await db.collection('users').orderBy('dailyXP', 'desc').limit(10).get();
-    let dailyHTML = "<h3>📅 Daily Top 10</h3><ol>";
+    let dailyHTML = '<h3>📅 Daily Top 10</h3><ol>';
     dailySnap.forEach(doc => {
       const d = doc.data();
       dailyHTML += `<li>${d.nickname} — ${d.dailyXP} XP</li>`;
     });
-    dailyHTML += "</ol>";
-    if (document.getElementById('daily-lb')) document.getElementById('daily-lb').innerHTML = dailyHTML;
+    dailyHTML += '</ol>';
+    const dailyLb = document.getElementById('daily-lb');
+    if (dailyLb) dailyLb.innerHTML = dailyHTML;
 
   } catch (e) {
-    console.error("Leaderboard error:", e);
-  }
-}
+    console.error('Leaderboard error:', e);
   }
 }
