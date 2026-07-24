@@ -85,7 +85,9 @@ const exerciseMuscles = {
   "Push Ups bodyweight":            { Chest: 50, Triceps: 25, Shoulders: 15, Core: 10 },
   "Deadlift 2 arms":                { Back: 35, Hamstrings: 25, Glutes: 25, Quads: 10, Core: 5 },
   "Squat bodyweight":               { Quads: 40, Glutes: 30, Hamstrings: 15, Core: 10, Calves: 5 },
-  "Leg Press 2 legs":               { Quads: 50, Glutes: 30, Hamstrings: 15, Calves: 5 }
+  "Leg Press 2 legs":               { Quads: 50, Glutes: 30, Hamstrings: 15, Calves: 5 },
+  "Lying Leg Raises bodyweight":    { Core: 85, Quads: 15 },
+  "Crunches":                       { Core: 100 }
 };
 
 function emptyMuscles() {
@@ -113,7 +115,9 @@ const exerciseFactors = {
   "Push Ups bodyweight": 0.106,
   "Deadlift 2 arms": 0.10,
   "Squat bodyweight": 0.076,
-  "Leg Press 2 legs": 0.07
+  "Leg Press 2 legs": 0.07,
+  "Lying Leg Raises bodyweight": 0.12,
+  "Crunches": 0.2
 };
 
 function populateExercises() {
@@ -451,4 +455,3 @@ async function loadLeaderboards() {
     console.error('Leaderboard error:', e);
   }
 }
-
