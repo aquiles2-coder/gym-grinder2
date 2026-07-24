@@ -60,6 +60,11 @@ function hide(id) {
   if (el) el.style.display = 'none';
 }
 
+// Returns today's date as "YYYY-MM-DD" (used for daily XP reset)
+function getTodayString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 // ─── Muscle system ───────────────────────────────────────────
 const ALL_MUSCLES = [
   "Chest", "Back", "Shoulders", "Biceps", "Triceps",
@@ -67,27 +72,28 @@ const ALL_MUSCLES = [
 ];
 
 // Percentage of XP that goes to each muscle (must sum to 100)
+// Ordered alphabetically
 const exerciseMuscles = {
-  "Lateral Raise 1 arm":            { Shoulders: 90, Forearms: 10 },
-  "Biceps Curl 1 arm":              { Biceps: 85, Forearms: 15 },
-  "Hammer Curl 1 arm":              { Biceps: 60, Forearms: 40 },
-  "Chest Fly 1 arm":                { Chest: 90, Shoulders: 10 },
-  "Lying Triceps Extension 2 arms": { Triceps: 90, Forearms: 10 },
-  "Push-down 2 arms":               { Triceps: 85, Forearms: 15 },
-  "Shoulder Press 2 arms":          { Shoulders: 70, Triceps: 20, Chest: 10 },
-  "Leg Curl 2 legs":                { Hamstrings: 85, Calves: 15 },
-  "Pull-down 2 arms":               { Back: 75, Biceps: 20, Forearms: 5 },
-  "Bent-over Row 2 arms":           { Back: 70, Biceps: 15, Shoulders: 10, Forearms: 5 },
   "Bench Press 2 arms":             { Chest: 55, Triceps: 25, Shoulders: 20 },
-  "Leg Extension 2 legs":           { Quads: 90, Core: 10 },
-  "Pull Ups bodyweight":            { Back: 60, Biceps: 25, Forearms: 10, Core: 5 },
-  "Dip bodyweight":                 { Chest: 40, Triceps: 40, Shoulders: 15, Core: 5 },
-  "Push Ups bodyweight":            { Chest: 50, Triceps: 25, Shoulders: 15, Core: 10 },
+  "Bent-over Row 2 arms":           { Back: 70, Biceps: 15, Shoulders: 10, Forearms: 5 },
+  "Biceps Curl 1 arm":              { Biceps: 85, Forearms: 15 },
+  "Chest Fly 1 arm":                { Chest: 90, Shoulders: 10 },
+  "Crunches":                       { Core: 100 },
   "Deadlift 2 arms":                { Back: 35, Hamstrings: 25, Glutes: 25, Quads: 10, Core: 5 },
-  "Squat bodyweight":               { Quads: 40, Glutes: 30, Hamstrings: 15, Core: 10, Calves: 5 },
+  "Dip bodyweight":                 { Chest: 40, Triceps: 40, Shoulders: 15, Core: 5 },
+  "Hammer Curl 1 arm":              { Biceps: 60, Forearms: 40 },
+  "Lateral Raise 1 arm":            { Shoulders: 90, Forearms: 10 },
+  "Leg Curl 2 legs":                { Hamstrings: 85, Calves: 15 },
+  "Leg Extension 2 legs":           { Quads: 90, Core: 10 },
   "Leg Press 2 legs":               { Quads: 50, Glutes: 30, Hamstrings: 15, Calves: 5 },
   "Lying Leg Raises bodyweight":    { Core: 85, Quads: 15 },
-  "Crunches":                       { Core: 100 }
+  "Lying Triceps Extension 2 arms": { Triceps: 90, Forearms: 10 },
+  "Pull Ups bodyweight":            { Back: 60, Biceps: 25, Forearms: 10, Core: 5 },
+  "Pull-down 2 arms":               { Back: 75, Biceps: 20, Forearms: 5 },
+  "Push Ups bodyweight":            { Chest: 50, Triceps: 25, Shoulders: 15, Core: 10 },
+  "Push-down 2 arms":               { Triceps: 85, Forearms: 15 },
+  "Shoulder Press 2 arms":          { Shoulders: 70, Triceps: 20, Chest: 10 },
+  "Squat bodyweight":               { Quads: 40, Glutes: 30, Hamstrings: 15, Core: 10, Calves: 5 }
 };
 
 function emptyMuscles() {
@@ -97,27 +103,28 @@ function emptyMuscles() {
 }
 
 // Classification values (factors) from the table – higher = more XP per kg×reps
+// Ordered alphabetically
 const exerciseFactors = {
-  "Lateral Raise 1 arm": 1.00,
-  "Biceps Curl 1 arm": 0.76,
-  "Hammer Curl 1 arm": 0.70,
-  "Chest Fly 1 arm": 0.70,
-  "Lying Triceps Extension 2 arms": 0.38,
-  "Push-down 2 arms": 0.29,
-  "Shoulder Press 2 arms": 0.26,
-  "Leg Curl 2 legs": 0.25,
-  "Pull-down 2 arms": 0.19,
-  "Bent-over Row 2 arms": 0.18,
   "Bench Press 2 arms": 0.17,
-  "Leg Extension 2 legs": 0.16,
-  "Pull Ups bodyweight": 0.15,
-  "Dip bodyweight": 0.13,
-  "Push Ups bodyweight": 0.106,
+  "Bent-over Row 2 arms": 0.18,
+  "Biceps Curl 1 arm": 0.76,
+  "Chest Fly 1 arm": 0.70,
+  "Crunches": 0.2,
   "Deadlift 2 arms": 0.10,
-  "Squat bodyweight": 0.076,
+  "Dip bodyweight": 0.13,
+  "Hammer Curl 1 arm": 0.70,
+  "Lateral Raise 1 arm": 1.00,
+  "Leg Curl 2 legs": 0.25,
+  "Leg Extension 2 legs": 0.16,
   "Leg Press 2 legs": 0.07,
   "Lying Leg Raises bodyweight": 0.12,
-  "Crunches": 0.2
+  "Lying Triceps Extension 2 arms": 0.38,
+  "Pull Ups bodyweight": 0.15,
+  "Pull-down 2 arms": 0.19,
+  "Push Ups bodyweight": 0.106,
+  "Push-down 2 arms": 0.29,
+  "Shoulder Press 2 arms": 0.26,
+  "Squat bodyweight": 0.076
 };
 
 function populateExercises() {
@@ -252,6 +259,7 @@ async function handleRegister() {
       approved: true,
       dailyXP: 0,
       weeklyXP: 0,
+      lastDailyReset: getTodayString(),
       muscles: emptyMuscles()
     });
     alert('✅ Account created successfully! You are now logged in.');
@@ -279,9 +287,18 @@ async function loadUserData(uid) {
         userInfoEl.innerHTML = `Welcome, ${data.nickname}`;
       }
 
-      // Ensure muscles object exists for older accounts
+      // Reset dailyXP if the day has changed
+      const today = getTodayString();
+      const updates = {};
       if (!data.muscles) {
-        await db.collection('users').doc(uid).update({ muscles: emptyMuscles() });
+        updates.muscles = emptyMuscles();
+      }
+      if (data.lastDailyReset !== today) {
+        updates.dailyXP = 0;
+        updates.lastDailyReset = today;
+      }
+      if (Object.keys(updates).length > 0) {
+        await db.collection('users').doc(uid).update(updates);
       }
     }
   } catch (e) {
@@ -402,11 +419,20 @@ async function logWorkout() {
       updatedMuscles[muscle] = (updatedMuscles[muscle] || 0) + gain;
     }
 
+    // Reset dailyXP if this is a new day, then add today's gain
+    const today = getTodayString();
+    let dailyXP = data.dailyXP || 0;
+    if (data.lastDailyReset !== today) {
+      dailyXP = 0;
+    }
+    dailyXP += xpGain;
+
     await userRef.update({
       xp: newXP,
       level: newLevel,
       strength: Math.floor((data.strength || 10) + (xpGain / 30)),
-      dailyXP: (data.dailyXP || 0) + xpGain,
+      dailyXP: dailyXP,
+      lastDailyReset: today,
       weeklyXP: (data.weeklyXP || 0) + xpGain,
       muscles: updatedMuscles
     });
@@ -442,17 +468,29 @@ async function loadLeaderboards() {
     const globalLb = document.getElementById('global-lb');
     if (globalLb) globalLb.innerHTML = html;
 
-    const dailySnap = await db.collection('users').orderBy('dailyXP', 'desc').limit(10).get();
-    let dailyHTML = '<h3>📅 Daily Top 10</h3><ol>';
-    dailySnap.forEach(doc => {
-      const d = doc.data();
-      dailyHTML += `<li>${d.nickname} — ${d.dailyXP || 0} XP</li>`;
-    });
+    // Only show users who have logged in / worked out today
+    const today = getTodayString();
+    const dailySnap = await db.collection('users')
+      .where('lastDailyReset', '==', today)
+      .orderBy('dailyXP', 'desc')
+      .limit(10)
+      .get();
+
+    let dailyHTML = '<h3>📅 Daily Top 10 (XP earned today)</h3><ol>';
+    if (dailySnap.empty) {
+      dailyHTML += '<li>No workouts logged today yet</li>';
+    } else {
+      dailySnap.forEach(doc => {
+        const d = doc.data();
+        dailyHTML += `<li>${d.nickname} — ${d.dailyXP || 0} XP</li>`;
+      });
+    }
     dailyHTML += '</ol>';
     const dailyLb = document.getElementById('daily-lb');
     if (dailyLb) dailyLb.innerHTML = dailyHTML;
 
   } catch (e) {
     console.error('Leaderboard error:', e);
+    // If the composite index is missing, Firebase will log a link to create it
   }
 }
