@@ -74,19 +74,18 @@ const exerciseFactors = {
   "Leg Extension 2 legs": 0.16,
   "Pull Ups bodyweight": 0.15,
   "Dip bodyweight": 0.13,
-  "Push Ups bodywiegth": 0.106,
+  "Push Ups bodyweight": 0.106,
   "Deadlift 2 arms": 0.10,
   "Squat bodyweight": 0.076,
   "Leg Press 2 legs": 0.07
-  
 };
 
 function populateExercises() {
   const select = document.getElementById('exercise-select');
   if (!select) return;
 
-  // Avoid duplicating options on re-runs
-  if (select.options.length > 0) return;
+  // Always clear previous options so name changes take effect
+  select.innerHTML = '';
 
   const exercises = Object.keys(exerciseFactors);
   exercises.forEach(ex => {
