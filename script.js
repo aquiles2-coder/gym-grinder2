@@ -127,7 +127,8 @@ function populateExercises() {
   // Always clear previous options so name changes take effect
   select.innerHTML = '';
 
-  const exercises = Object.keys(exerciseFactors);
+  // Sort exercises alphabetically
+  const exercises = Object.keys(exerciseFactors).sort();
   exercises.forEach(ex => {
     const opt = document.createElement('option');
     opt.value = ex;
