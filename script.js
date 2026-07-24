@@ -15,8 +15,16 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('logout-btn').style.display = 'inline-block';
 
       const doc = await db.collection('users').doc(user.uid).get();
-      if (doc.exists && doc.data().approved === true) {
-        // Approved → show the game
+      const data = doc.exists ? doc.data() : {};
+
+      // Only block if approved is explicitly false
+      if (data.approved === false) {
+        // Not approved yet → show waiting message
+        document.getElementById('main-game').style.display = 'none';
+        document.getElementById('pending-section').style.display = 'block';
+        document.getElementById('user-info').innerHTML = `Welcome, ${data.nickname || 'User'}`;
+      } else {
+        // Approved (or old account without the field) → show the game
         document.getElementById('pending-section').style.display = 'none';
         document.getElementById('main-game').style.display = 'block';
         await loadUserData(user.uid);
