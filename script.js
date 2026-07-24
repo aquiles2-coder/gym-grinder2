@@ -30,12 +30,12 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadUserData(user.uid);
         setupWorkoutListeners();
         loadLeaderboards();
-      } else {
-        // Not approved yet → show waiting message
-        document.getElementById('main-game').style.display = 'none';
-        document.getElementById('pending-section').style.display = 'block';
-        document.getElementById('user-info').innerHTML = `Welcome, ${doc.exists ? doc.data().nickname : 'User'}`;
       }
+    } else {
+      document.getElementById('auth-section').style.display = 'block';
+      document.getElementById('main-game').style.display = 'none';
+      document.getElementById('pending-section').style.display = 'none';
+      document.getElementById('logout-btn').style.display = 'none';
     }
   });
 });
@@ -212,5 +212,7 @@ async function loadLeaderboards() {
 
   } catch (e) {
     console.error("Leaderboard error:", e);
+  }
+}
   }
 }
