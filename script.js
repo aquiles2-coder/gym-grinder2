@@ -65,6 +65,16 @@ function getTodayString() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Returns the Monday of the current week as "YYYY-MM-DD" (used for weekly XP reset)
+function getWeekStartString() {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sunday ... 6 = Saturday
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // shift to Monday
+  const monday = new Date(now);
+  monday.setDate(diff);
+  return monday.toISOString().slice(0, 10);
+}
+
 // ─── Muscle system ───────────────────────────────────────────
 const ALL_MUSCLES = [
   "Chest", "Back", "Shoulders", "Biceps", "Triceps",
@@ -260,6 +270,7 @@ async function handleRegister() {
       dailyXP: 0,
       weeklyXP: 0,
       lastDailyReset: getTodayString(),
+      lastWeeklyReset: getWeekStartString(),
       muscles: emptyMuscles()
     });
     alert('✅ Account created successfully! You are now logged in.');
@@ -287,8 +298,9 @@ async function loadUserData(uid) {
         userInfoEl.innerHTML = `Welcome, ${data.nickname}`;
       }
 
-      // Reset dailyXP if the day has changed
+      // Reset dailyXP / weeklyXP if the period has changed
       const today = getTodayString();
+      const weekStart = getWeekStartString();
       const updates = {};
       if (!data.muscles) {
         updates.muscles = emptyMuscles();
@@ -296,6 +308,10 @@ async function loadUserData(uid) {
       if (data.lastDailyReset !== today) {
         updates.dailyXP = 0;
         updates.lastDailyReset = today;
+      }
+      if (data.lastWeeklyReset !== weekStart) {
+        updates.weeklyXP = 0;
+        updates.lastWeeklyReset = weekStart;
       }
       if (Object.keys(updates).length > 0) {
         await db.collection('users').doc(uid).update(updates);
@@ -419,13 +435,21 @@ async function logWorkout() {
       updatedMuscles[muscle] = (updatedMuscles[muscle] || 0) + gain;
     }
 
-    // Reset dailyXP if this is a new day, then add today's gain
+    // Reset dailyXP / weeklyXP if the period has changed, then add the gain
     const today = getTodayString();
+    const weekStart = getWeekStartString();
+
     let dailyXP = data.dailyXP || 0;
     if (data.lastDailyReset !== today) {
       dailyXP = 0;
     }
     dailyXP += xpGain;
+
+    let weeklyXP = data.weeklyXP || 0;
+    if (data.lastWeeklyReset !== weekStart) {
+      weeklyXP = 0;
+    }
+    weeklyXP += xpGain;
 
     await userRef.update({
       xp: newXP,
@@ -433,7 +457,8 @@ async function logWorkout() {
       strength: Math.floor((data.strength || 10) + (xpGain / 30)),
       dailyXP: dailyXP,
       lastDailyReset: today,
-      weeklyXP: (data.weeklyXP || 0) + xpGain,
+      weeklyXP: weeklyXP,
+      lastWeeklyReset: weekStart,
       muscles: updatedMuscles
     });
 
@@ -458,6 +483,7 @@ async function logWorkout() {
 
 async function loadLeaderboards() {
   try {
+    // ── Global ──────────────────────────────────────────────
     const globalSnap = await db.collection('users').orderBy('level', 'desc').limit(20).get();
     let html = '<h3>🌍 Global Top 20</h3><ol>';
     globalSnap.forEach(doc => {
@@ -468,7 +494,7 @@ async function loadLeaderboards() {
     const globalLb = document.getElementById('global-lb');
     if (globalLb) globalLb.innerHTML = html;
 
-    // Only show users who have logged in / worked out today
+    // ── Daily ───────────────────────────────────────────────
     const today = getTodayString();
     const dailySnap = await db.collection('users')
       .where('lastDailyReset', '==', today)
@@ -489,8 +515,29 @@ async function loadLeaderboards() {
     const dailyLb = document.getElementById('daily-lb');
     if (dailyLb) dailyLb.innerHTML = dailyHTML;
 
+    // ── Weekly ──────────────────────────────────────────────
+    const weekStart = getWeekStartString();
+    const weeklySnap = await db.collection('users')
+      .where('lastWeeklyReset', '==', weekStart)
+      .orderBy('weeklyXP', 'desc')
+      .limit(10)
+      .get();
+
+    let weeklyHTML = '<h3>📆 Weekly Top 10 (XP earned this week)</h3><ol>';
+    if (weeklySnap.empty) {
+      weeklyHTML += '<li>No workouts logged this week yet</li>';
+    } else {
+      weeklySnap.forEach(doc => {
+        const d = doc.data();
+        weeklyHTML += `<li>${d.nickname} — ${d.weeklyXP || 0} XP</li>`;
+      });
+    }
+    weeklyHTML += '</ol>';
+    const weeklyLb = document.getElementById('weekly-lb');
+    if (weeklyLb) weeklyLb.innerHTML = weeklyHTML;
+
   } catch (e) {
     console.error('Leaderboard error:', e);
-    // If the composite index is missing, Firebase will log a link to create it
+    // If a composite index is missing, Firebase will log a link to create it
   }
 }
