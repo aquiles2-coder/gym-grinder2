@@ -259,6 +259,13 @@ select:focus, input[type="number"]:focus {
   margin: 6px 0;
 }
 
+/* Inactive players on daily/weekly leaderboards */
+.inactive {
+  color: #888;
+  font-size: 0.85em;
+  font-style: italic;
+}
+
 #global-lb li, #daily-lb li {
   margin: 6px 0;
 }
