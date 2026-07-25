@@ -60,19 +60,29 @@ function hide(id) {
   if (el) el.style.display = 'none';
 }
 
-// Returns today's date as "YYYY-MM-DD" (used for daily XP reset)
+// Returns today's date as "YYYY-MM-DD" in Lisbon time (used for daily XP reset)
 function getTodayString() {
-  return new Date().toISOString().slice(0, 10);
+  // en-CA locale gives YYYY-MM-DD format
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Lisbon' });
 }
 
-// Returns the Monday of the current week as "YYYY-MM-DD" (used for weekly XP reset)
+// Returns the Monday of the current week as "YYYY-MM-DD" in Lisbon time
 function getWeekStartString() {
-  const now = new Date();
-  const day = now.getDay(); // 0 = Sunday ... 6 = Saturday
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // shift to Monday
-  const monday = new Date(now);
+  // Get current date parts in Lisbon timezone
+  const lisbonStr = new Date().toLocaleString('en-US', { timeZone: 'Europe/Lisbon' });
+  const lisbonDate = new Date(lisbonStr);
+
+  const day = lisbonDate.getDay(); // 0 = Sunday ... 6 = Saturday
+  const diff = lisbonDate.getDate() - day + (day === 0 ? -6 : 1); // shift to Monday
+
+  const monday = new Date(lisbonDate);
   monday.setDate(diff);
-  return monday.toISOString().slice(0, 10);
+
+  // Format as YYYY-MM-DD
+  const year = monday.getFullYear();
+  const month = String(monday.getMonth() + 1).padStart(2, '0');
+  const date = String(monday.getDate()).padStart(2, '0');
+  return `${year}-${month}-${date}`;
 }
 
 // ─── Muscle system ───────────────────────────────────────────
@@ -497,21 +507,29 @@ async function loadLeaderboards() {
     console.error('Global leaderboard error:', e);
   }
 
-  // ── Daily (by highest dailyXP) ──────────────────────────
+  // ── Daily (by highest dailyXP) – only active players ────
   try {
+    const today = getTodayString();
     const dailySnap = await db.collection('users')
       .orderBy('dailyXP', 'desc')
-      .limit(10)
+      .limit(30) // fetch more so we can filter down to 10 active
       .get();
 
     let dailyHTML = '<h3>📅 Daily Top 10</h3><ol>';
-    if (dailySnap.empty) {
-      dailyHTML += '<li>No data yet</li>';
-    } else {
-      dailySnap.forEach(doc => {
-        const d = doc.data();
+    let count = 0;
+
+    dailySnap.forEach(doc => {
+      if (count >= 10) return;
+      const d = doc.data();
+      // Only show players who are active today
+      if (d.lastDailyReset === today) {
         dailyHTML += `<li>${d.nickname} — ${d.dailyXP || 0} XP</li>`;
-      });
+        count++;
+      }
+    });
+
+    if (count === 0) {
+      dailyHTML += '<li>No active players today yet</li>';
     }
     dailyHTML += '</ol>';
     const dailyLb = document.getElementById('daily-lb');
@@ -520,21 +538,29 @@ async function loadLeaderboards() {
     console.error('Daily leaderboard error:', e);
   }
 
-  // ── Weekly (by highest weeklyXP) ────────────────────────
+  // ── Weekly (by highest weeklyXP) – only active players ──
   try {
+    const weekStart = getWeekStartString();
     const weeklySnap = await db.collection('users')
       .orderBy('weeklyXP', 'desc')
-      .limit(10)
+      .limit(30) // fetch more so we can filter down to 10 active
       .get();
 
     let weeklyHTML = '<h3>📆 Weekly Top 10</h3><ol>';
-    if (weeklySnap.empty) {
-      weeklyHTML += '<li>No data yet</li>';
-    } else {
-      weeklySnap.forEach(doc => {
-        const d = doc.data();
+    let count = 0;
+
+    weeklySnap.forEach(doc => {
+      if (count >= 10) return;
+      const d = doc.data();
+      // Only show players who are active this week
+      if (d.lastWeeklyReset === weekStart) {
         weeklyHTML += `<li>${d.nickname} — ${d.weeklyXP || 0} XP</li>`;
-      });
+        count++;
+      }
+    });
+
+    if (count === 0) {
+      weeklyHTML += '<li>No active players this week yet</li>';
     }
     weeklyHTML += '</ol>';
     const weeklyLb = document.getElementById('weekly-lb');
