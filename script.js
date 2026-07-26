@@ -122,7 +122,7 @@ function emptyMuscles() {
   return m;
 }
 
-// Classification values (factors) from the table – higher = more XP per kg×reps
+// Classification values (factors) from the table – used in XP formula: reps * (weight * factor)^2
 // Ordered alphabetically
 const exerciseFactors = {
   "Bench Press 2 arms": 0.17,
@@ -350,13 +350,13 @@ function calculateCumulativeXP(level) {
 }
 
 function muscleLevel(xp) {
-  // Simple level: every 100 XP = 1 muscle level
-  return Math.floor((xp || 0) / 100) + 1;
+  // Simple level: every 500 XP = 1 muscle level
+  return Math.floor((xp || 0) / 500) + 1;
 }
 
 function muscleProgress(xp) {
-  // Progress toward next muscle level (0–100)
-  return ((xp || 0) % 100);
+  // XP toward next muscle level (0–499)
+  return ((xp || 0) % 500);
 }
 
 async function loadProfile(uid) {
@@ -390,15 +390,16 @@ async function loadProfile(uid) {
     sorted.forEach(({ name, xp }) => {
       const lvl = muscleLevel(xp);
       const prog = muscleProgress(xp);
+      const progPct = Math.floor((prog / 500) * 100);
       html += `
         <div class="muscle-card">
           <div class="muscle-name">${name}</div>
           <div class="muscle-level">Lv ${lvl}</div>
           <div class="muscle-xp">${xp} XP</div>
           <div class="progress-bar">
-            <div class="progress-fill" style="width: ${prog}%"></div>
+            <div class="progress-fill" style="width: ${progPct}%"></div>
           </div>
-          <div class="muscle-next">${prog}/100 to next</div>
+          <div class="muscle-next">${prog}/500 to next</div>
         </div>
       `;
     });
