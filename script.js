@@ -113,8 +113,10 @@ const exerciseMuscles = {
   "Pull-down 2 arms":               { Back: 75, Biceps: 20, Forearms: 5 },
   "Push Ups bodyweight":            { Chest: 50, Triceps: 25, Shoulders: 15, Core: 10 },
   "Push-down 2 arms":               { Triceps: 85, Forearms: 15 },
+  "Seated Calf Raises 2 legs":      { Calves: 100 },
   "Shoulder Press 2 arms":          { Shoulders: 70, Triceps: 20, Chest: 10 },
-  "Squat bodyweight":               { Quads: 40, Glutes: 30, Hamstrings: 15, Core: 10, Calves: 5 }
+  "Squat bodyweight":               { Quads: 40, Glutes: 30, Hamstrings: 15, Core: 10, Calves: 5 },
+  "Standing Calf Raises bodyweight":{ Calves: 100 }
 };
 
 function emptyMuscles() {
@@ -144,8 +146,10 @@ const exerciseFactors = {
   "Pull-down 2 arms": 0.19,
   "Push Ups bodyweight": 0.106,
   "Push-down 2 arms": 0.29,
+  "Seated Calf Raises 2 legs": 0.15,
   "Shoulder Press 2 arms": 0.26,
-  "Squat bodyweight": 0.076
+  "Squat bodyweight": 0.076,
+  "Standing Calf Raises bodyweight": 0.06
 };
 
 function populateExercises() {
