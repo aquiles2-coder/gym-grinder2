@@ -222,6 +222,17 @@ progress {
   margin-top: 4px;
 }
 
+/* Muscles with 0 XP this week appear dimmed */
+.muscle-card.muscle-zero {
+  opacity: 0.45;
+}
+.muscle-card.muscle-zero .muscle-name {
+  color: #88aa88;
+}
+.muscle-card.muscle-zero .progress-fill {
+  width: 0 !important;
+}
+
 /* Muscle gains message under workout log */
 .muscle-gains {
   display: block;
