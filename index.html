@@ -32,6 +32,7 @@
       <nav class="nav-tabs">
         <button class="tab-btn active" data-tab="workout">Workout</button>
         <button class="tab-btn" data-tab="history">History</button>
+        <button class="tab-btn" data-tab="weekly">Weekly</button>
         <button class="tab-btn" data-tab="profile">Profile</button>
         <button class="tab-btn" data-tab="leaderboards">Leaderboards</button>
       </nav>
@@ -53,12 +54,20 @@
         <div id="sets-list"></div>
       </section>
 
+      <!-- Weekly muscle progress section -->
+      <section id="weekly" class="tab-content" style="display: none;">
+        <h2>📆 Weekly Muscle Progress</h2>
+        <p class="hint">XP gained this week per muscle. Resets every Monday with weekly XP.</p>
+        <div id="weekly-header" class="stats"></div>
+        <div id="weekly-muscle-grid" class="muscle-grid"></div>
+      </section>
+
       <!-- Profile section -->
       <section id="profile" class="tab-content" style="display: none;">
         <h2>👤 Your Profile</h2>
         <div id="profile-header" class="stats"></div>
         <h3>Muscle Progress</h3>
-        <p class="hint">Each exercise distributes XP to the muscles it works.</p>
+        <p class="hint">Each exercise distributes XP to the muscles it works. Lifetime totals.</p>
         <div id="muscle-grid" class="muscle-grid"></div>
       </section>
 
