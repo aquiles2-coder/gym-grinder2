@@ -31,6 +31,7 @@
       <!-- Navigation tabs -->
       <nav class="nav-tabs">
         <button class="tab-btn active" data-tab="workout">Workout</button>
+        <button class="tab-btn" data-tab="history">History</button>
         <button class="tab-btn" data-tab="profile">Profile</button>
         <button class="tab-btn" data-tab="leaderboards">Leaderboards</button>
       </nav>
@@ -43,6 +44,13 @@
         <input type="number" id="reps" placeholder="Reps" min="1">
         <button id="confirm-btn">CONFIRM SET 💪</button>
         <p id="log-message"></p>
+      </section>
+
+      <!-- History section – last 30 confirmed sets -->
+      <section id="history" class="tab-content" style="display: none;">
+        <h2>📜 Recent Sets</h2>
+        <p class="hint">Last 30 confirmed sets</p>
+        <div id="sets-list"></div>
       </section>
 
       <!-- Profile section -->
@@ -73,4 +81,3 @@
   <script src="script.js"></script>
 </body>
 </html>
-
