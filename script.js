@@ -218,9 +218,12 @@ function setupTabs() {
         target.classList.add('active');
       }
 
-      // Refresh profile when switching to it
+      // Refresh data when switching to the corresponding tab
       if (tab === 'profile' && currentUser) {
         loadProfile(currentUser.uid);
+      }
+      if (tab === 'weekly' && currentUser) {
+        loadWeeklyProgress(currentUser.uid);
       }
       if (tab === 'history' && currentUser) {
         loadHistory(currentUser.uid);
@@ -284,7 +287,8 @@ async function handleRegister() {
       weeklyXP: 0,
       lastDailyReset: getTodayString(),
       lastWeeklyReset: getWeekStartString(),
-      muscles: emptyMuscles()
+      muscles: emptyMuscles(),
+      weeklyMuscles: emptyMuscles()
     });
     alert('✅ Account created successfully! You are now logged in.');
   } catch (error) {
@@ -311,12 +315,15 @@ async function loadUserData(uid) {
         userInfoEl.innerHTML = `Welcome, ${data.nickname}`;
       }
 
-      // Reset dailyXP / weeklyXP if the period has changed
+      // Reset dailyXP / weeklyXP / weeklyMuscles if the period has changed
       const today = getTodayString();
       const weekStart = getWeekStartString();
       const updates = {};
       if (!data.muscles) {
         updates.muscles = emptyMuscles();
+      }
+      if (!data.weeklyMuscles) {
+        updates.weeklyMuscles = emptyMuscles();
       }
       if (data.lastDailyReset !== today) {
         updates.dailyXP = 0;
@@ -324,6 +331,7 @@ async function loadUserData(uid) {
       }
       if (data.lastWeeklyReset !== weekStart) {
         updates.weeklyXP = 0;
+        updates.weeklyMuscles = emptyMuscles();
         updates.lastWeeklyReset = weekStart;
       }
       if (Object.keys(updates).length > 0) {
@@ -397,6 +405,62 @@ async function loadProfile(uid) {
     grid.innerHTML = html;
   } catch (e) {
     console.error('loadProfile error:', e);
+  }
+}
+
+async function loadWeeklyProgress(uid) {
+  try {
+    const doc = await db.collection('users').doc(uid).get();
+    if (!doc.exists) return;
+
+    const data = doc.data();
+    const weekStart = getWeekStartString();
+
+    // Ensure weeklyMuscles is current (in case reset hasn't run yet this session)
+    let weeklyMuscles = data.weeklyMuscles || emptyMuscles();
+    let weeklyXP = data.weeklyXP || 0;
+    if (data.lastWeeklyReset !== weekStart) {
+      weeklyMuscles = emptyMuscles();
+      weeklyXP = 0;
+    }
+
+    // Header
+    const header = document.getElementById('weekly-header');
+    if (header) {
+      header.innerHTML = `
+        <strong>This week</strong><br>
+        Total weekly XP: <span style="color:#00ff88">${weeklyXP}</span>
+      `;
+    }
+
+    // Muscle grid – sort by weekly XP descending
+    const grid = document.getElementById('weekly-muscle-grid');
+    if (!grid) return;
+
+    const sorted = ALL_MUSCLES
+      .map(name => ({ name, xp: weeklyMuscles[name] || 0 }))
+      .sort((a, b) => b.xp - a.xp);
+
+    const maxXP = Math.max(...sorted.map(m => m.xp), 1); // avoid division by 0
+
+    let html = '';
+    sorted.forEach(({ name, xp }) => {
+      const pct = Math.round((xp / maxXP) * 100);
+      const isZero = xp === 0;
+      html += `
+        <div class="muscle-card ${isZero ? 'muscle-zero' : ''}">
+          <div class="muscle-name">${name}</div>
+          <div class="muscle-xp">${xp} XP this week</div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: ${pct}%"></div>
+          </div>
+          <div class="muscle-next">${isZero ? 'Not worked yet' : `${pct}% of top muscle`}</div>
+        </div>
+      `;
+    });
+    grid.innerHTML = html;
+  } catch (e) {
+    console.error('loadWeeklyProgress error:', e);
   }
 }
 
@@ -494,14 +558,14 @@ async function logWorkout() {
       newLevel++;
     }
 
-    // Merge muscle XP
+    // Merge lifetime muscle XP
     const currentMuscles = data.muscles || emptyMuscles();
     const updatedMuscles = { ...currentMuscles };
     for (const [muscle, gain] of Object.entries(muscleGains)) {
       updatedMuscles[muscle] = (updatedMuscles[muscle] || 0) + gain;
     }
 
-    // Reset dailyXP / weeklyXP if the period has changed, then add the gain
+    // Reset dailyXP / weeklyXP / weeklyMuscles if the period has changed, then add the gain
     const today = getTodayString();
     const weekStart = getWeekStartString();
 
@@ -512,10 +576,18 @@ async function logWorkout() {
     dailyXP += xpGain;
 
     let weeklyXP = data.weeklyXP || 0;
+    let currentWeeklyMuscles = data.weeklyMuscles || emptyMuscles();
     if (data.lastWeeklyReset !== weekStart) {
       weeklyXP = 0;
+      currentWeeklyMuscles = emptyMuscles();
     }
     weeklyXP += xpGain;
+
+    // Merge weekly muscle XP
+    const updatedWeeklyMuscles = { ...currentWeeklyMuscles };
+    for (const [muscle, gain] of Object.entries(muscleGains)) {
+      updatedWeeklyMuscles[muscle] = (updatedWeeklyMuscles[muscle] || 0) + gain;
+    }
 
     await userRef.update({
       xp: newXP,
@@ -525,7 +597,8 @@ async function logWorkout() {
       lastDailyReset: today,
       weeklyXP: weeklyXP,
       lastWeeklyReset: weekStart,
-      muscles: updatedMuscles
+      muscles: updatedMuscles,
+      weeklyMuscles: updatedWeeklyMuscles
     });
 
     // Save individual set for History page
