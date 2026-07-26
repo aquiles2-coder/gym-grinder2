@@ -537,7 +537,7 @@ async function logWorkout() {
   }
 
   const factor = exerciseFactors[exercise] ?? 0.1;  // fallback if somehow missing
-  const xpGain = Math.floor(weight * reps * factor);
+  const xpGain = Math.floor(reps * Math.pow(weight * factor, 2));
 
   // Muscle distribution for this exercise
   const muscleMap = exerciseMuscles[exercise] || {};
