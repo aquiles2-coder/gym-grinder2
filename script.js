@@ -1,6 +1,7 @@
 let db, auth, currentUser = null;
 let workoutListenerAttached = false;
 let tabsListenerAttached = false;
+let lastLoggedSet = null; // stores the most recent set so we can undo it
 
 document.addEventListener('DOMContentLoaded', () => {
   // Safety check: Firebase must be loaded
@@ -523,8 +524,12 @@ function setupWorkoutListeners() {
   const btn = document.getElementById('confirm-btn');
   if (btn) {
     btn.addEventListener('click', logWorkout);
-    workoutListenerAttached = true;
   }
+  const undoBtn = document.getElementById('undo-btn');
+  if (undoBtn) {
+    undoBtn.addEventListener('click', undoLastSet);
+  }
+  workoutListenerAttached = true;
 }
 
 async function logWorkout() {
@@ -547,6 +552,22 @@ async function logWorkout() {
     muscleGains[muscle] = Math.floor(xpGain * (pct / 100));
   }
 
+  // ── Confirmation dialog (requires OK) ───────────────────
+  const musclePreview = Object.entries(muscleGains)
+    .filter(([, g]) => g > 0)
+    .map(([m, g]) => `${m} +${g}`)
+    .join(', ');
+  const confirmMsg =
+    `Confirm this set?\n\n` +
+    `${exercise}\n` +
+    `${weight} kg × ${reps} reps\n` +
+    `+${xpGain} XP` +
+    (musclePreview ? `\n(${musclePreview})` : '') +
+    `\n\nClick OK to save, or Cancel to abort.`;
+  if (!confirm(confirmMsg)) {
+    return; // user cancelled
+  }
+
   try {
     const userRef = db.collection('users').doc(currentUser.uid);
     const doc = await userRef.get();
@@ -558,6 +579,9 @@ async function logWorkout() {
     while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
       newLevel++;
     }
+
+    const strengthGain = Math.floor(xpGain / 30);
+    const newStrength = Math.floor((data.strength || 10) + strengthGain);
 
     // Merge lifetime muscle XP
     const currentMuscles = data.muscles || emptyMuscles();
@@ -593,7 +617,7 @@ async function logWorkout() {
     await userRef.update({
       xp: newXP,
       level: newLevel,
-      strength: Math.floor((data.strength || 10) + (xpGain / 30)),
+      strength: newStrength,
       dailyXP: dailyXP,
       lastDailyReset: today,
       weeklyXP: weeklyXP,
@@ -604,7 +628,7 @@ async function logWorkout() {
 
     // Save individual set for History page
     const setsRef = userRef.collection('sets');
-    await setsRef.add({
+    const setDocRef = await setsRef.add({
       exercise: exercise,
       weight: weight,
       reps: reps,
@@ -623,6 +647,21 @@ async function logWorkout() {
       await batch.commit();
     }
 
+    // Store everything needed for a perfect undo
+    lastLoggedSet = {
+      setId: setDocRef.id,
+      xpGain,
+      strengthGain,
+      muscleGains,
+      exercise,
+      weight,
+      reps
+    };
+
+    // Show the Undo button
+    const undoBtn = document.getElementById('undo-btn');
+    if (undoBtn) undoBtn.style.display = 'inline-block';
+
     // Build nice message showing muscle gains
     let muscleMsg = Object.entries(muscleGains)
       .filter(([, g]) => g > 0)
@@ -639,6 +678,97 @@ async function logWorkout() {
   } catch (error) {
     console.error('Workout error:', error);
     alert('Error saving workout.');
+  }
+}
+
+async function undoLastSet() {
+  if (!lastLoggedSet || !currentUser) {
+    alert('Nothing to undo.');
+    return;
+  }
+
+  const { setId, xpGain, strengthGain, muscleGains, exercise, weight, reps } = lastLoggedSet;
+
+  if (!confirm(
+    `Undo the last set?\n\n` +
+    `${exercise}\n` +
+    `${weight} kg × ${reps} reps\n` +
+    `−${xpGain} XP\n\n` +
+    `This cannot be undone again. Click OK to confirm.`
+  )) {
+    return;
+  }
+
+  try {
+    const userRef = db.collection('users').doc(currentUser.uid);
+    const doc = await userRef.get();
+    if (!doc.exists) {
+      alert('User data not found.');
+      return;
+    }
+    const data = doc.data();
+
+    // Subtract XP and recalculate level from the new total
+    let newXP = Math.max(0, (data.xp || 0) - xpGain);
+    let newLevel = 1;
+    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
+      newLevel++;
+    }
+
+    // Subtract strength (never go below 10)
+    const newStrength = Math.max(10, (data.strength || 10) - strengthGain);
+
+    // Subtract muscle XP (lifetime)
+    const updatedMuscles = { ...(data.muscles || emptyMuscles()) };
+    for (const [muscle, gain] of Object.entries(muscleGains)) {
+      updatedMuscles[muscle] = Math.max(0, (updatedMuscles[muscle] || 0) - gain);
+    }
+
+    // Subtract weekly muscle XP
+    const updatedWeeklyMuscles = { ...(data.weeklyMuscles || emptyMuscles()) };
+    for (const [muscle, gain] of Object.entries(muscleGains)) {
+      updatedWeeklyMuscles[muscle] = Math.max(0, (updatedWeeklyMuscles[muscle] || 0) - gain);
+    }
+
+    // Subtract daily / weekly XP (floor at 0)
+    const newDailyXP = Math.max(0, (data.dailyXP || 0) - xpGain);
+    const newWeeklyXP = Math.max(0, (data.weeklyXP || 0) - xpGain);
+
+    await userRef.update({
+      xp: newXP,
+      level: newLevel,
+      strength: newStrength,
+      dailyXP: newDailyXP,
+      weeklyXP: newWeeklyXP,
+      muscles: updatedMuscles,
+      weeklyMuscles: updatedWeeklyMuscles
+    });
+
+    // Delete the exact set document
+    await userRef.collection('sets').doc(setId).delete();
+
+    // Clear undo state and hide button
+    lastLoggedSet = null;
+    const undoBtn = document.getElementById('undo-btn');
+    if (undoBtn) undoBtn.style.display = 'none';
+
+    const logMsg = document.getElementById('log-message');
+    if (logMsg) {
+      logMsg.innerHTML = `↩️ Last set undone (−${xpGain} XP)`;
+    }
+
+    await loadUserData(currentUser.uid);
+    loadLeaderboards();
+
+    // Refresh history if that tab is currently visible
+    const historySection = document.getElementById('history');
+    if (historySection && historySection.style.display !== 'none') {
+      loadHistory(currentUser.uid);
+    }
+
+  } catch (error) {
+    console.error('Undo error:', error);
+    alert('Error undoing the set. Please try again.');
   }
 }
 
