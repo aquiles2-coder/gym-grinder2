@@ -93,6 +93,17 @@ button:hover {
   transform: scale(1.05);
 }
 
+/* Undo button – distinct look so it stands out from Confirm */
+#undo-btn {
+  background: #ff8800;
+  font-size: 18px;
+  padding: 12px 22px;
+}
+#undo-btn:hover {
+  background: #ffff00;
+  color: black;
+}
+
 .stats {
   font-size: 20px;
   background: rgba(10, 10, 10, 0.65);
