@@ -222,6 +222,9 @@ function setupTabs() {
       if (tab === 'profile' && currentUser) {
         loadProfile(currentUser.uid);
       }
+      if (tab === 'history' && currentUser) {
+        loadHistory(currentUser.uid);
+      }
       if (tab === 'leaderboards') {
         loadLeaderboards();
       }
@@ -397,6 +400,59 @@ async function loadProfile(uid) {
   }
 }
 
+function formatSetDate(timestamp) {
+  if (!timestamp || !timestamp.toDate) return '—';
+  const d = timestamp.toDate();
+  return d.toLocaleString('en-GB', {
+    timeZone: 'Europe/Lisbon',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+async function loadHistory(uid) {
+  const listEl = document.getElementById('sets-list');
+  if (!listEl) return;
+
+  listEl.innerHTML = '<p class="hint">Loading…</p>';
+
+  try {
+    const snap = await db.collection('users').doc(uid).collection('sets')
+      .orderBy('createdAt', 'desc')
+      .limit(30)
+      .get();
+
+    if (snap.empty) {
+      listEl.innerHTML = '<p class="hint">No sets logged yet. Confirm a set on the Workout tab!</p>';
+      return;
+    }
+
+    let html = '';
+    snap.forEach(doc => {
+      const s = doc.data();
+      html += `
+        <div class="set-card">
+          <div class="set-exercise">${s.exercise || '—'}</div>
+          <div class="set-details">
+            <span>${s.weight ?? '—'} kg</span>
+            <span>×</span>
+            <span>${s.reps ?? '—'} reps</span>
+          </div>
+          <div class="set-xp">+${s.xp ?? 0} XP</div>
+          <div class="set-date">${formatSetDate(s.createdAt)}</div>
+        </div>
+      `;
+    });
+    listEl.innerHTML = html;
+  } catch (e) {
+    console.error('loadHistory error:', e);
+    listEl.innerHTML = '<p class="hint">Could not load history. Check console for details.</p>';
+  }
+}
+
 function setupWorkoutListeners() {
   if (workoutListenerAttached) return;
   const btn = document.getElementById('confirm-btn');
@@ -471,6 +527,27 @@ async function logWorkout() {
       lastWeeklyReset: weekStart,
       muscles: updatedMuscles
     });
+
+    // Save individual set for History page
+    const setsRef = userRef.collection('sets');
+    await setsRef.add({
+      exercise: exercise,
+      weight: weight,
+      reps: reps,
+      xp: xpGain,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Keep only the newest 30 sets – delete the oldest ones if over limit
+    const allSetsSnap = await setsRef.orderBy('createdAt', 'asc').get();
+    if (allSetsSnap.size > 30) {
+      const excess = allSetsSnap.size - 30;
+      const batch = db.batch();
+      allSetsSnap.docs.slice(0, excess).forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+    }
 
     // Build nice message showing muscle gains
     let muscleMsg = Object.entries(muscleGains)
