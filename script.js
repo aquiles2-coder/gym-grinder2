@@ -1,7 +1,8 @@
 let db, auth, currentUser = null;
 let workoutListenerAttached = false;
 let tabsListenerAttached = false;
-let lastLoggedSet = null; // stores the most recent set so we can undo it
+let lastLoggedSet = null; // stores the most recent workout set so we can undo it
+let lastLoggedCardio = null; // stores the most recent cardio session so we can undo it
 
 document.addEventListener('DOMContentLoaded', () => {
   // Safety check: Firebase must be loaded
@@ -21,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   populateExercises();
+  populateCardioExercises();
   setupAuthListeners();
   setupLogout();
   setupTabs();
@@ -89,7 +91,7 @@ function getWeekStartString() {
 // ─── Muscle system ───────────────────────────────────────────
 const ALL_MUSCLES = [
   "Chest", "Back", "Shoulders", "Biceps", "Triceps",
-  "Forearms", "Core", "Quads", "Hamstrings", "Glutes", "Calves"
+  "Forearms", "Core", "Quads", "Hamstrings", "Glutes", "Calves", "Cardio"
 ];
 
 // Percentage of XP that goes to each muscle (must sum to 100)
@@ -152,6 +154,15 @@ const exerciseFactors = {
   "Standing Calf Raises bodyweight": 0.06
 };
 
+// Cardio coefficients – XP = coefficient * kilometers * 20000
+const cardioCoefficients = {
+  "Stair": 1.00,
+  "Run": 0.082,
+  "Walk": 0.063,
+  "Row": 0.047,
+  "Bicycle": 0.033
+};
+
 function populateExercises() {
   const select = document.getElementById('exercise-select');
   if (!select) return;
@@ -161,6 +172,22 @@ function populateExercises() {
 
   // Sort exercises alphabetically
   const exercises = Object.keys(exerciseFactors).sort();
+  exercises.forEach(ex => {
+    const opt = document.createElement('option');
+    opt.value = ex;
+    opt.textContent = ex;
+    select.appendChild(opt);
+  });
+}
+
+function populateCardioExercises() {
+  const select = document.getElementById('cardio-select');
+  if (!select) return;
+
+  select.innerHTML = '';
+
+  // Keep order from the coefficients table (Stair first as highest)
+  const exercises = Object.keys(cardioCoefficients);
   exercises.forEach(ex => {
     const opt = document.createElement('option');
     opt.value = ex;
@@ -324,12 +351,23 @@ async function loadUserData(uid) {
       const today = getTodayString();
       const weekStart = getWeekStartString();
       const updates = {};
-      if (!data.muscles) {
-        updates.muscles = emptyMuscles();
+
+      // Ensure muscles object has every entry from ALL_MUSCLES (e.g. newly added Cardio)
+      const ensureFull = (m) => {
+        const full = emptyMuscles();
+        if (m) Object.assign(full, m);
+        return full;
+      };
+      const fullMuscles = ensureFull(data.muscles);
+      const fullWeekly = ensureFull(data.weeklyMuscles);
+      // Only write if something was missing
+      if (!data.muscles || Object.keys(data.muscles).length < ALL_MUSCLES.length) {
+        updates.muscles = fullMuscles;
       }
-      if (!data.weeklyMuscles) {
-        updates.weeklyMuscles = emptyMuscles();
+      if (!data.weeklyMuscles || Object.keys(data.weeklyMuscles).length < ALL_MUSCLES.length) {
+        updates.weeklyMuscles = fullWeekly;
       }
+
       if (data.lastDailyReset !== today) {
         updates.dailyXP = 0;
         updates.lastDailyReset = today;
@@ -503,13 +541,15 @@ async function loadHistory(uid) {
     let html = '';
     snap.forEach(doc => {
       const s = doc.data();
+      const isCardio = s.type === 'cardio';
+      const details = isCardio
+        ? `<span>${s.kilometers ?? '—'} km</span>`
+        : `<span>${s.weight ?? '—'} kg</span><span>×</span><span>${s.reps ?? '—'} reps</span>`;
       html += `
         <div class="set-card">
-          <div class="set-exercise">${s.exercise || '—'}</div>
+          <div class="set-exercise">${s.exercise || '—'}${isCardio ? ' 🏃' : ''}</div>
           <div class="set-details">
-            <span>${s.weight ?? '—'} kg</span>
-            <span>×</span>
-            <span>${s.reps ?? '—'} reps</span>
+            ${details}
           </div>
           <div class="set-xp">+${s.xp ?? 0} XP</div>
           <div class="set-date">${formatSetDate(s.createdAt)}</div>
@@ -532,6 +572,15 @@ function setupWorkoutListeners() {
   const undoBtn = document.getElementById('undo-btn');
   if (undoBtn) {
     undoBtn.addEventListener('click', undoLastSet);
+  }
+  // Cardio listeners
+  const cardioBtn = document.getElementById('cardio-confirm-btn');
+  if (cardioBtn) {
+    cardioBtn.addEventListener('click', logCardio);
+  }
+  const cardioUndoBtn = document.getElementById('cardio-undo-btn');
+  if (cardioUndoBtn) {
+    cardioUndoBtn.addEventListener('click', undoLastCardio);
   }
   workoutListenerAttached = true;
 }
@@ -773,6 +822,222 @@ async function undoLastSet() {
   } catch (error) {
     console.error('Undo error:', error);
     alert('Error undoing the set. Please try again.');
+  }
+}
+
+async function logCardio() {
+  const exercise = document.getElementById('cardio-select').value;
+  const km = parseFloat(document.getElementById('kilometers').value);
+
+  if (isNaN(km) || km <= 0) {
+    alert('Please enter a valid distance in kilometers!');
+    return;
+  }
+
+  const coeff = cardioCoefficients[exercise] ?? 0.05;
+  const xpGain = Math.floor(coeff * km * 20000);
+
+  // Cardio XP goes 100% to the fictitious "Cardio" body part
+  const muscleGains = { Cardio: xpGain };
+
+  // ── Confirmation dialog ─────────────────────────────────
+  const confirmMsg =
+    `Confirm this cardio session?\n\n` +
+    `${exercise}\n` +
+    `${km} km\n` +
+    `+${xpGain} XP\n` +
+    `(Cardio +${xpGain})\n\n` +
+    `Click OK to save, or Cancel to abort.`;
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  try {
+    const userRef = db.collection('users').doc(currentUser.uid);
+    const doc = await userRef.get();
+    const data = doc.data();
+
+    let newXP = (data.xp || 0) + xpGain;
+    let newLevel = data.level || 1;
+
+    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
+      newLevel++;
+    }
+
+    const strengthGain = Math.floor(xpGain / 30);
+    const newStrength = Math.floor((data.strength || 10) + strengthGain);
+
+    // Merge lifetime muscle XP (only Cardio)
+    const currentMuscles = data.muscles || emptyMuscles();
+    const updatedMuscles = { ...currentMuscles };
+    updatedMuscles.Cardio = (updatedMuscles.Cardio || 0) + xpGain;
+
+    // Reset dailyXP / weeklyXP / weeklyMuscles if the period has changed, then add the gain
+    const today = getTodayString();
+    const weekStart = getWeekStartString();
+
+    let dailyXP = data.dailyXP || 0;
+    if (data.lastDailyReset !== today) {
+      dailyXP = 0;
+    }
+    dailyXP += xpGain;
+
+    let weeklyXP = data.weeklyXP || 0;
+    let currentWeeklyMuscles = data.weeklyMuscles || emptyMuscles();
+    if (data.lastWeeklyReset !== weekStart) {
+      weeklyXP = 0;
+      currentWeeklyMuscles = emptyMuscles();
+    }
+    weeklyXP += xpGain;
+
+    // Merge weekly muscle XP (only Cardio)
+    const updatedWeeklyMuscles = { ...currentWeeklyMuscles };
+    updatedWeeklyMuscles.Cardio = (updatedWeeklyMuscles.Cardio || 0) + xpGain;
+
+    await userRef.update({
+      xp: newXP,
+      level: newLevel,
+      strength: newStrength,
+      dailyXP: dailyXP,
+      lastDailyReset: today,
+      weeklyXP: weeklyXP,
+      lastWeeklyReset: weekStart,
+      muscles: updatedMuscles,
+      weeklyMuscles: updatedWeeklyMuscles
+    });
+
+    // Save individual session for History page
+    const setsRef = userRef.collection('sets');
+    const setDocRef = await setsRef.add({
+      type: 'cardio',
+      exercise: exercise,
+      kilometers: km,
+      xp: xpGain,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Keep only the newest 30 sets – delete the oldest ones if over limit
+    const allSetsSnap = await setsRef.orderBy('createdAt', 'asc').get();
+    if (allSetsSnap.size > 30) {
+      const excess = allSetsSnap.size - 30;
+      const batch = db.batch();
+      allSetsSnap.docs.slice(0, excess).forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+    }
+
+    // Store everything needed for a perfect undo
+    lastLoggedCardio = {
+      setId: setDocRef.id,
+      xpGain,
+      strengthGain,
+      muscleGains,
+      exercise,
+      kilometers: km
+    };
+
+    // Show the Undo button
+    const undoBtn = document.getElementById('cardio-undo-btn');
+    if (undoBtn) undoBtn.style.display = 'inline-block';
+
+    const logMsg = document.getElementById('cardio-log-message');
+    if (logMsg) {
+      logMsg.innerHTML = `✅ +${xpGain} XP from ${exercise} (${km} km)!<br><span class="muscle-gains">Cardio +${xpGain}</span>`;
+    }
+    await loadUserData(currentUser.uid);
+    loadLeaderboards();
+
+  } catch (error) {
+    console.error('Cardio error:', error);
+    alert('Error saving cardio session.');
+  }
+}
+
+async function undoLastCardio() {
+  if (!lastLoggedCardio || !currentUser) {
+    alert('Nothing to undo.');
+    return;
+  }
+
+  const { setId, xpGain, strengthGain, muscleGains, exercise, kilometers } = lastLoggedCardio;
+
+  if (!confirm(
+    `Undo the last cardio session?\n\n` +
+    `${exercise}\n` +
+    `${kilometers} km\n` +
+    `−${xpGain} XP\n\n` +
+    `This cannot be undone again. Click OK to confirm.`
+  )) {
+    return;
+  }
+
+  try {
+    const userRef = db.collection('users').doc(currentUser.uid);
+    const doc = await userRef.get();
+    if (!doc.exists) {
+      alert('User data not found.');
+      return;
+    }
+    const data = doc.data();
+
+    // Subtract XP and recalculate level from the new total
+    let newXP = Math.max(0, (data.xp || 0) - xpGain);
+    let newLevel = 1;
+    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
+      newLevel++;
+    }
+
+    // Subtract strength (never go below 10)
+    const newStrength = Math.max(10, (data.strength || 10) - strengthGain);
+
+    // Subtract muscle XP (lifetime) – only Cardio
+    const updatedMuscles = { ...(data.muscles || emptyMuscles()) };
+    updatedMuscles.Cardio = Math.max(0, (updatedMuscles.Cardio || 0) - xpGain);
+
+    // Subtract weekly muscle XP
+    const updatedWeeklyMuscles = { ...(data.weeklyMuscles || emptyMuscles()) };
+    updatedWeeklyMuscles.Cardio = Math.max(0, (updatedWeeklyMuscles.Cardio || 0) - xpGain);
+
+    // Subtract daily / weekly XP (floor at 0)
+    const newDailyXP = Math.max(0, (data.dailyXP || 0) - xpGain);
+    const newWeeklyXP = Math.max(0, (data.weeklyXP || 0) - xpGain);
+
+    await userRef.update({
+      xp: newXP,
+      level: newLevel,
+      strength: newStrength,
+      dailyXP: newDailyXP,
+      weeklyXP: newWeeklyXP,
+      muscles: updatedMuscles,
+      weeklyMuscles: updatedWeeklyMuscles
+    });
+
+    // Delete the exact set document
+    await userRef.collection('sets').doc(setId).delete();
+
+    // Clear undo state and hide button
+    lastLoggedCardio = null;
+    const undoBtn = document.getElementById('cardio-undo-btn');
+    if (undoBtn) undoBtn.style.display = 'none';
+
+    const logMsg = document.getElementById('cardio-log-message');
+    if (logMsg) {
+      logMsg.innerHTML = `↩️ Last cardio session undone (−${xpGain} XP)`;
+    }
+
+    await loadUserData(currentUser.uid);
+    loadLeaderboards();
+
+    // Refresh history if that tab is currently visible
+    const historySection = document.getElementById('history');
+    if (historySection && historySection.style.display !== 'none') {
+      loadHistory(currentUser.uid);
+    }
+
+  } catch (error) {
+    console.error('Cardio undo error:', error);
+    alert('Error undoing the cardio session. Please try again.');
   }
 }
 
