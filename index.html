@@ -31,6 +31,7 @@
       <!-- Navigation tabs -->
       <nav class="nav-tabs">
         <button class="tab-btn active" data-tab="workout">Workout</button>
+        <button class="tab-btn" data-tab="cardio">Cardio</button>
         <button class="tab-btn" data-tab="history">History</button>
         <button class="tab-btn" data-tab="weekly">Weekly</button>
         <button class="tab-btn" data-tab="profile">Profile</button>
@@ -46,6 +47,16 @@
         <button id="confirm-btn">CONFIRM SET 💪</button>
         <button id="undo-btn" style="display: none;">UNDO LAST SET ↩️</button>
         <p id="log-message"></p>
+      </section>
+
+      <!-- Cardio section -->
+      <section id="cardio" class="tab-content" style="display: none;">
+        <h2>Log Cardio</h2>
+        <select id="cardio-select"></select><br><br>
+        <input type="number" id="kilometers" placeholder="Kilometers" step="0.1" min="0.1">
+        <button id="cardio-confirm-btn">CONFIRM 🏃</button>
+        <button id="cardio-undo-btn" style="display: none;">UNDO LAST ↩️</button>
+        <p id="cardio-log-message"></p>
       </section>
 
       <!-- History section – last 30 confirmed sets -->
