@@ -31,17 +31,36 @@ document.addEventListener('DOMContentLoaded', () => {
     if (user) {
       currentUser = user;
       hide('auth-section');
-      hide('pending-section');
       show('logout-btn', 'inline-block');
-      show('main-game', 'block');
 
       try {
-        await loadUserData(user.uid);
-        setupWorkoutListeners();
-        loadLeaderboards();
+        const doc = await db.collection('users').doc(user.uid).get();
+
+        if (!doc.exists) {
+          // Document missing – force logout so user can re-register cleanly
+          console.error('User document not found');
+          await auth.signOut();
+          return;
+        }
+
+        const data = doc.data();
+
+        if (data.approved === true) {
+          // Approved → show the game
+          hide('pending-section');
+          show('main-game', 'block');
+          await loadUserData(user.uid);
+          setupWorkoutListeners();
+          loadLeaderboards();
+        } else {
+          // Not yet approved → show waiting screen
+          hide('main-game');
+          show('pending-section', 'block');
+        }
       } catch (err) {
-        console.error('Error loading user data:', err);
-        setupWorkoutListeners();
+        console.error('Error checking approval status:', err);
+        hide('main-game');
+        show('pending-section', 'block');
       }
     } else {
       currentUser = null;
@@ -314,7 +333,7 @@ async function handleRegister() {
       level: 1,
       xp: 0,
       strength: 10,
-      approved: true,
+      approved: false,          // new players start locked until admin approves
       dailyXP: 0,
       weeklyXP: 0,
       lastDailyReset: getTodayString(),
@@ -322,7 +341,7 @@ async function handleRegister() {
       muscles: emptyMuscles(),
       weeklyMuscles: emptyMuscles()
     });
-    alert('✅ Account created successfully! You are now logged in.');
+    alert('✅ Account created!\n\nWaiting for admin approval.\nYou will be able to play once an admin activates your account.');
   } catch (error) {
     if (error.code === 'auth/email-already-in-use') {
       alert('This nickname is already taken. Please choose another one.');
