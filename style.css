@@ -94,12 +94,14 @@ button:hover {
 }
 
 /* Undo button – distinct look so it stands out from Confirm */
-#undo-btn {
+#undo-btn,
+#cardio-undo-btn {
   background: #ff8800;
   font-size: 18px;
   padding: 12px 22px;
 }
-#undo-btn:hover {
+#undo-btn:hover,
+#cardio-undo-btn:hover {
   background: #ffff00;
   color: black;
 }
