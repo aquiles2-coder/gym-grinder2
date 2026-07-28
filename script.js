@@ -176,6 +176,7 @@ const exerciseFactors = {
 // Cardio coefficients – XP = coefficient * kilometers * 20000
 const cardioCoefficients = {
   "Stair": 1.00,
+  "Swim": 0.242,
   "Run": 0.082,
   "Walk": 0.063,
   "Row": 0.047,
