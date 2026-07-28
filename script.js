@@ -331,10 +331,10 @@ async function handleRegister() {
   const nickname = prompt('Choose a Nickname:');
   if (!nickname) return;
 
-  const password = prompt('Choose a Password (min 4 chars):');
-  if (!password || password.length < 4) {
-    return alert('Password must be at least 4 characters!');
-  }
+  const password = prompt('Choose a Password (min 6 chars):');
+if (!password || password.length < 6) {
+  return alert('Password must be at least 6 characters!');
+}
 
   const confirmPassword = prompt('Confirm Password:');
   if (password !== confirmPassword) {
