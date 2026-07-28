@@ -119,12 +119,18 @@ const exerciseMuscles = {
   "Bench Press 2 arms":             { Chest: 55, Triceps: 25, Shoulders: 20 },
   "Bent-over Row 2 arms":           { Back: 70, Biceps: 15, Shoulders: 10, Forearms: 5 },
   "Biceps Curl 1 arm":              { Biceps: 85, Forearms: 15 },
+  "Bulgarian Split Squat 1 leg bodyweight": { Quads: 40, Glutes: 30, Hamstrings: 20, Core: 10 },
   "Chest Fly 1 arm":                { Chest: 90, Shoulders: 10 },
+  "Chin Ups bodyweight":            { Back: 45, Biceps: 40, Forearms: 10, Core: 5 },
   "Crunches":                       { Core: 100 },
   "Deadlift 2 arms":                { Back: 35, Hamstrings: 25, Glutes: 25, Quads: 10, Core: 5 },
   "Dip bodyweight":                 { Chest: 40, Triceps: 40, Shoulders: 15, Core: 5 },
+  "Glute Kickback Machine 1 leg":   { Glutes: 75, Hamstrings: 20, Core: 5 },
   "Hammer Curl 1 arm":              { Biceps: 60, Forearms: 40 },
+  "Hip Abduction 2 legs":           { Glutes: 85, Core: 15 },
+  "Incline Bench Press 2 arms":     { Chest: 50, Shoulders: 30, Triceps: 20 },
   "Lateral Raise 1 arm":            { Shoulders: 90, Forearms: 10 },
+  "Leg Abduction 2 legs":           { Glutes: 80, Quads: 10, Core: 10 },
   "Leg Curl 2 legs":                { Hamstrings: 85, Calves: 15 },
   "Leg Extension 2 legs":           { Quads: 90, Core: 10 },
   "Leg Press 2 legs":               { Quads: 50, Glutes: 30, Hamstrings: 15, Calves: 5 },
@@ -137,7 +143,9 @@ const exerciseMuscles = {
   "Seated Calf Raises 2 legs":      { Calves: 100 },
   "Shoulder Press 2 arms":          { Shoulders: 70, Triceps: 20, Chest: 10 },
   "Squat bodyweight":               { Quads: 40, Glutes: 30, Hamstrings: 15, Core: 10, Calves: 5 },
-  "Standing Calf Raises bodyweight":{ Calves: 100 }
+  "Standing Calf Raises bodyweight":{ Calves: 100 },
+  "Wrist Curls 1 hand":             { Forearms: 100 },
+  "Wrist Extension 1 hand":         { Forearms: 100 }
 };
 
 function emptyMuscles() {
@@ -152,12 +160,18 @@ const exerciseFactors = {
   "Bench Press 2 arms": 0.17,
   "Bent-over Row 2 arms": 0.18,
   "Biceps Curl 1 arm": 0.76,
+  "Bulgarian Split Squat 1 leg bodyweight": 0.10,
   "Chest Fly 1 arm": 0.70,
+  "Chin Ups bodyweight": 0.14,
   "Crunches": 0.2,
   "Deadlift 2 arms": 0.10,
   "Dip bodyweight": 0.13,
+  "Glute Kickback Machine 1 leg": 0.30,
   "Hammer Curl 1 arm": 0.70,
+  "Hip Abduction 2 legs": 0.12,
+  "Incline Bench Press 2 arms": 0.19,
   "Lateral Raise 1 arm": 1.00,
+  "Leg Abduction 2 legs": 0.11,
   "Leg Curl 2 legs": 0.25,
   "Leg Extension 2 legs": 0.16,
   "Leg Press 2 legs": 0.07,
@@ -170,7 +184,9 @@ const exerciseFactors = {
   "Seated Calf Raises 2 legs": 0.15,
   "Shoulder Press 2 arms": 0.26,
   "Squat bodyweight": 0.076,
-  "Standing Calf Raises bodyweight": 0.06
+  "Standing Calf Raises bodyweight": 0.06,
+  "Wrist Curls 1 hand": 0.43,
+  "Wrist Extension 1 hand": 0.39
 };
 
 // Cardio coefficients – XP = coefficient * kilometers * 20000
