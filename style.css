@@ -344,3 +344,124 @@ select:focus, input[type="number"]:focus {
   color: #66aa66;
 }
 
+/* ─── Custom Modal (in-game dialogs) ──────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  background: rgba(12, 12, 12, 0.95);
+  border: 2px solid rgba(0, 255, 0, 0.45);
+  border-radius: 14px;
+  padding: 24px 22px 20px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 0 30px rgba(0, 255, 0, 0.18), 0 12px 40px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  animation: modalIn 0.22s ease-out;
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal h3 {
+  color: #ffff00;
+  margin: 0 0 14px;
+  font-size: 22px;
+  text-shadow: 0 0 10px rgba(255, 255, 0, 0.45);
+}
+
+#modal-body {
+  color: #00ff00;
+  font-size: 16px;
+  line-height: 1.45;
+  margin-bottom: 20px;
+  white-space: pre-line; /* keeps \n as line breaks */
+}
+
+#modal-body .modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+#modal-body .modal-form label {
+  display: block;
+  font-size: 14px;
+  color: #88ff88;
+  margin-bottom: 4px;
+}
+
+#modal-body .modal-form input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 17px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 0, 0.4);
+  background: rgba(20, 20, 20, 0.9);
+  color: #00ff00;
+  outline: none;
+}
+
+#modal-body .modal-form input:focus {
+  border-color: #ffff00;
+  box-shadow: 0 0 8px rgba(255, 255, 0, 0.3);
+}
+
+#modal-body .modal-error {
+  color: #ff5555;
+  font-size: 14px;
+  margin-top: 6px;
+  min-height: 18px;
+}
+
+#modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+#modal-actions button {
+  font-size: 18px;
+  padding: 12px 26px;
+  margin: 0;
+  min-width: 110px;
+}
+
+#modal-cancel {
+  background: #444;
+}
+
+#modal-cancel:hover {
+  background: #666;
+  color: white;
+}
+
+#modal-ok {
+  background: #ff0000;
+}
+
+#modal-ok:hover {
+  background: #ffff00;
+  color: black;
+}
+
