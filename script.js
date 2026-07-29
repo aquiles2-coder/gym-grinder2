@@ -4,10 +4,206 @@ let tabsListenerAttached = false;
 let lastLoggedSet = null; // stores the most recent workout set so we can undo it
 let lastLoggedCardio = null; // stores the most recent cardio session so we can undo it
 
+// ─── Custom Modal System (replaces alert / confirm / prompt) ───
+let _modalResolve = null;
+
+function _getModalEls() {
+  return {
+    overlay: document.getElementById('modal-overlay'),
+    title: document.getElementById('modal-title'),
+    body: document.getElementById('modal-body'),
+    okBtn: document.getElementById('modal-ok'),
+    cancelBtn: document.getElementById('modal-cancel')
+  };
+}
+
+function _closeModal(result) {
+  const { overlay, okBtn, cancelBtn } = _getModalEls();
+  if (!overlay) return;
+  overlay.style.display = 'none';
+  overlay.setAttribute('aria-hidden', 'true');
+  // Clear listeners by cloning buttons
+  const newOk = okBtn.cloneNode(true);
+  okBtn.parentNode.replaceChild(newOk, okBtn);
+  const newCancel = cancelBtn.cloneNode(true);
+  cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+  if (_modalResolve) {
+    const resolve = _modalResolve;
+    _modalResolve = null;
+    resolve(result);
+  }
+}
+
+/**
+ * Core modal. Returns a Promise.
+ * options = {
+ *   type: 'alert' | 'confirm' | 'form',
+ *   title: string,
+ *   message: string (for alert/confirm),
+ *   fields: [{ id, label, type, placeholder, value? }] (for form),
+ *   okText: string,
+ *   cancelText: string
+ * }
+ * Resolves: undefined (alert), true/false (confirm), object|null (form)
+ */
+function showModal(options = {}) {
+  return new Promise((resolve) => {
+    const { overlay, title, body, okBtn, cancelBtn } = _getModalEls();
+    if (!overlay) {
+      // Fallback if modal HTML is missing
+      if (options.type === 'confirm') resolve(window.confirm(options.message || ''));
+      else if (options.type === 'form') resolve(null);
+      else { window.alert(options.message || ''); resolve(); }
+      return;
+    }
+
+    _modalResolve = resolve;
+
+    title.textContent = options.title || 'Gym Grinder';
+    okBtn.textContent = options.okText || 'OK';
+    cancelBtn.textContent = options.cancelText || 'Cancel';
+
+    // Build body
+    body.innerHTML = '';
+    if (options.type === 'form' && Array.isArray(options.fields)) {
+      const form = document.createElement('div');
+      form.className = 'modal-form';
+      options.fields.forEach(f => {
+        const label = document.createElement('label');
+        label.htmlFor = 'modal-field-' + f.id;
+        label.textContent = f.label || f.id;
+        const input = document.createElement('input');
+        input.id = 'modal-field-' + f.id;
+        input.type = f.type || 'text';
+        input.placeholder = f.placeholder || '';
+        if (f.value != null) input.value = f.value;
+        input.autocomplete = f.type === 'password' ? 'current-password' : 'off';
+        form.appendChild(label);
+        form.appendChild(input);
+      });
+      const err = document.createElement('div');
+      err.className = 'modal-error';
+      err.id = 'modal-form-error';
+      form.appendChild(err);
+      body.appendChild(form);
+    } else {
+      // alert / confirm – support multi-line
+      body.textContent = options.message || '';
+    }
+
+    // Show / hide cancel
+    if (options.type === 'alert') {
+      cancelBtn.style.display = 'none';
+    } else {
+      cancelBtn.style.display = 'inline-block';
+    }
+
+    // Event handlers (re-query after potential previous clone)
+    const els = _getModalEls();
+    els.okBtn.onclick = () => {
+      if (options.type === 'form') {
+        const values = {};
+        let valid = true;
+        options.fields.forEach(f => {
+          const input = document.getElementById('modal-field-' + f.id);
+          values[f.id] = input ? input.value.trim() : '';
+        });
+        // Basic required check
+        for (const f of options.fields) {
+          if (!values[f.id]) {
+            const errEl = document.getElementById('modal-form-error');
+            if (errEl) errEl.textContent = 'Please fill in all fields.';
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) return;
+        _closeModal(values);
+      } else if (options.type === 'confirm') {
+        _closeModal(true);
+      } else {
+        _closeModal();
+      }
+    };
+
+    els.cancelBtn.onclick = () => {
+      if (options.type === 'confirm') _closeModal(false);
+      else _closeModal(null);
+    };
+
+    // Enter key submits, Escape cancels
+    const keyHandler = (e) => {
+      if (e.key === 'Escape') {
+        document.removeEventListener('keydown', keyHandler);
+        if (options.type === 'confirm') _closeModal(false);
+        else if (options.type === 'form') _closeModal(null);
+        else _closeModal();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        els.okBtn.click();
+      }
+    };
+    document.addEventListener('keydown', keyHandler);
+
+    // Also remove key handler when closed
+    const originalResolve = _modalResolve;
+    _modalResolve = (result) => {
+      document.removeEventListener('keydown', keyHandler);
+      originalResolve(result);
+    };
+
+    overlay.style.display = 'flex';
+    overlay.setAttribute('aria-hidden', 'false');
+
+    // Focus first input or OK button
+    if (options.type === 'form') {
+      const first = document.getElementById('modal-field-' + options.fields[0].id);
+      if (first) setTimeout(() => first.focus(), 50);
+    } else {
+      setTimeout(() => els.okBtn.focus(), 50);
+    }
+  });
+}
+
+function showAlert(message, title = 'Gym Grinder') {
+  return showModal({ type: 'alert', title, message });
+}
+
+function showConfirm(message, title = 'Confirm') {
+  return showModal({ type: 'confirm', title, message, okText: 'OK', cancelText: 'Cancel' });
+}
+
+function showLoginForm() {
+  return showModal({
+    type: 'form',
+    title: 'Login',
+    fields: [
+      { id: 'nickname', label: 'Nickname', type: 'text', placeholder: 'Enter Nickname' },
+      { id: 'password', label: 'Password', type: 'password', placeholder: 'Enter Password' }
+    ],
+    okText: 'Login',
+    cancelText: 'Cancel'
+  });
+}
+
+function showRegisterForm() {
+  return showModal({
+    type: 'form',
+    title: 'Register',
+    fields: [
+      { id: 'nickname', label: 'Nickname', type: 'text', placeholder: 'Choose a Nickname' },
+      { id: 'password', label: 'Password (min 6 chars)', type: 'password', placeholder: 'Choose a Password' },
+      { id: 'confirmPassword', label: 'Confirm Password', type: 'password', placeholder: 'Confirm Password' }
+    ],
+    okText: 'Create Account',
+    cancelText: 'Cancel'
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Safety check: Firebase must be loaded
   if (typeof firebase === 'undefined') {
-    alert('Firebase failed to load. Check your internet connection and firebase-config.js');
+    showAlert('Firebase failed to load. Check your internet connection and firebase-config.js');
     console.error('Firebase is not defined');
     return;
   }
@@ -16,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
     auth = firebase.auth();
     db = firebase.firestore();
   } catch (e) {
-    alert('Error initializing Firebase: ' + e.message);
+    showAlert('Error initializing Firebase: ' + e.message);
     console.error(e);
     return;
   }
@@ -255,9 +451,9 @@ function setupLogout() {
     logoutBtn.addEventListener('click', async () => {
       try {
         await auth.signOut();
-        alert('Logged out successfully!');
+        await showAlert('Logged out successfully!');
       } catch (error) {
-        alert('Error logging out: ' + error.message);
+        await showAlert('Error logging out: ' + error.message);
       }
     });
   } else {
@@ -305,40 +501,39 @@ function setupTabs() {
 }
 
 async function handleLogin() {
-  const nickname = prompt('Enter Nickname:');
-  if (!nickname) return;
+  const result = await showLoginForm();
+  if (!result) return; // user cancelled
 
-  const password = prompt('Enter Password:');
-  if (!password) return;
-
+  const { nickname, password } = result;
   const email = `${nickname.toLowerCase().replace(/\s+/g, '')}@gymgrinder.app`;
 
   try {
     await auth.signInWithEmailAndPassword(email, password);
-    alert('✅ Login successful!');
+    await showAlert('✅ Login successful!');
   } catch (error) {
     if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-      alert('Account not found or wrong password. Please Register first or check your details.');
+      await showAlert('Account not found or wrong password. Please Register first or check your details.');
     } else if (error.code === 'auth/wrong-password') {
-      alert('Wrong password.');
+      await showAlert('Wrong password.');
     } else {
-      alert('Login error: ' + error.message);
+      await showAlert('Login error: ' + error.message);
     }
   }
 }
 
 async function handleRegister() {
-  const nickname = prompt('Choose a Nickname:');
-  if (!nickname) return;
+  const result = await showRegisterForm();
+  if (!result) return; // user cancelled
 
-  const password = prompt('Choose a Password (min 6 chars):');
-  if (!password || password.length < 6) {
-    return alert('Password must be at least 6 characters!');
+  const { nickname, password, confirmPassword } = result;
+
+  if (password.length < 6) {
+    await showAlert('Password must be at least 6 characters!');
+    return;
   }
-
-  const confirmPassword = prompt('Confirm Password:');
   if (password !== confirmPassword) {
-    return alert('Passwords do not match!');
+    await showAlert('Passwords do not match!');
+    return;
   }
 
   const email = `${nickname.toLowerCase().replace(/\s+/g, '')}@gymgrinder.app`;
@@ -358,12 +553,12 @@ async function handleRegister() {
       muscles: emptyMuscles(),
       weeklyMuscles: emptyMuscles()
     });
-    alert('✅ Account created!\n\nWaiting for admin approval.\nYou will be able to play once an admin activates your account.');
+    await showAlert('✅ Account created!\n\nWaiting for admin approval.\nYou will be able to play once an admin activates your account.');
   } catch (error) {
     if (error.code === 'auth/email-already-in-use') {
-      alert('This nickname is already taken. Please choose another one.');
+      await showAlert('This nickname is already taken. Please choose another one.');
     } else {
-      alert('Registration error: ' + error.message);
+      await showAlert('Registration error: ' + error.message);
     }
   }
 }
@@ -627,7 +822,7 @@ async function logWorkout() {
   const reps = parseInt(document.getElementById('reps').value);
 
   if (isNaN(weight) || isNaN(reps) || reps < 1) {
-    alert('Please enter valid weight and reps!');
+    await showAlert('Please enter valid weight and reps!');
     return;
   }
 
@@ -653,7 +848,7 @@ async function logWorkout() {
     `+${xpGain} XP` +
     (musclePreview ? `\n(${musclePreview})` : '') +
     `\n\nClick OK to save, or Cancel to abort.`;
-  if (!confirm(confirmMsg)) {
+  if (!(await showConfirm(confirmMsg))) {
     return; // user cancelled
   }
 
@@ -766,25 +961,25 @@ async function logWorkout() {
 
   } catch (error) {
     console.error('Workout error:', error);
-    alert('Error saving workout.');
+    await showAlert('Error saving workout.');
   }
 }
 
 async function undoLastSet() {
   if (!lastLoggedSet || !currentUser) {
-    alert('Nothing to undo.');
+    await showAlert('Nothing to undo.');
     return;
   }
 
   const { setId, xpGain, strengthGain, muscleGains, exercise, weight, reps } = lastLoggedSet;
 
-  if (!confirm(
+  if (!(await showConfirm(
     `Undo the last set?\n\n` +
     `${exercise}\n` +
     `${weight} kg × ${reps} reps\n` +
     `−${xpGain} XP\n\n` +
     `This cannot be undone again. Click OK to confirm.`
-  )) {
+  ))) {
     return;
   }
 
@@ -792,7 +987,7 @@ async function undoLastSet() {
     const userRef = db.collection('users').doc(currentUser.uid);
     const doc = await userRef.get();
     if (!doc.exists) {
-      alert('User data not found.');
+      await showAlert('User data not found.');
       return;
     }
     const data = doc.data();
@@ -857,7 +1052,7 @@ async function undoLastSet() {
 
   } catch (error) {
     console.error('Undo error:', error);
-    alert('Error undoing the set. Please try again.');
+    await showAlert('Error undoing the set. Please try again.');
   }
 }
 
@@ -866,7 +1061,7 @@ async function logCardio() {
   const km = parseFloat(document.getElementById('kilometers').value);
 
   if (isNaN(km) || km <= 0) {
-    alert('Please enter a valid distance in kilometers!');
+    await showAlert('Please enter a valid distance in kilometers!');
     return;
   }
 
@@ -884,7 +1079,7 @@ async function logCardio() {
     `+${xpGain} XP\n` +
     `(Cardio +${xpGain})\n\n` +
     `Click OK to save, or Cancel to abort.`;
-  if (!confirm(confirmMsg)) {
+  if (!(await showConfirm(confirmMsg))) {
     return;
   }
 
@@ -986,25 +1181,25 @@ async function logCardio() {
 
   } catch (error) {
     console.error('Cardio error:', error);
-    alert('Error saving cardio session.');
+    await showAlert('Error saving cardio session.');
   }
 }
 
 async function undoLastCardio() {
   if (!lastLoggedCardio || !currentUser) {
-    alert('Nothing to undo.');
+    await showAlert('Nothing to undo.');
     return;
   }
 
   const { setId, xpGain, strengthGain, muscleGains, exercise, kilometers } = lastLoggedCardio;
 
-  if (!confirm(
+  if (!(await showConfirm(
     `Undo the last cardio session?\n\n` +
     `${exercise}\n` +
     `${kilometers} km\n` +
     `−${xpGain} XP\n\n` +
     `This cannot be undone again. Click OK to confirm.`
-  )) {
+  ))) {
     return;
   }
 
@@ -1012,7 +1207,7 @@ async function undoLastCardio() {
     const userRef = db.collection('users').doc(currentUser.uid);
     const doc = await userRef.get();
     if (!doc.exists) {
-      alert('User data not found.');
+      await showAlert('User data not found.');
       return;
     }
     const data = doc.data();
@@ -1073,7 +1268,7 @@ async function undoLastCardio() {
 
   } catch (error) {
     console.error('Cardio undo error:', error);
-    alert('Error undoing the cardio session. Please try again.');
+    await showAlert('Error undoing the cardio session. Please try again.');
   }
 }
 
