@@ -332,9 +332,9 @@ async function handleRegister() {
   if (!nickname) return;
 
   const password = prompt('Choose a Password (min 6 chars):');
-if (!password || password.length < 6) {
-  return alert('Password must be at least 6 characters!');
-}
+  if (!password || password.length < 6) {
+    return alert('Password must be at least 6 characters!');
+  }
 
   const confirmPassword = prompt('Confirm Password:');
   if (password !== confirmPassword) {
@@ -373,7 +373,7 @@ async function loadUserData(uid) {
     const doc = await db.collection('users').doc(uid).get();
     if (doc.exists) {
       const data = doc.data();
-      const nextLevelXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 100;
+      const nextLevelXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 1000;
       const statsEl = document.getElementById('stats');
       const userInfoEl = document.getElementById('user-info');
       if (statsEl) {
@@ -424,18 +424,18 @@ async function loadUserData(uid) {
 
 function calculateCumulativeXP(level) {
   let total = 0;
-  for (let i = 1; i < level; i++) total += i * 100;
+  for (let i = 1; i < level; i++) total += i * 1000;
   return total;
 }
 
 function muscleLevel(xp) {
-  // Simple level: every 500 XP = 1 muscle level
-  return Math.floor((xp || 0) / 500) + 1;
+  // Simple level: every 5000 XP = 1 muscle level
+  return Math.floor((xp || 0) / 5000) + 1;
 }
 
 function muscleProgress(xp) {
-  // XP toward next muscle level (0–499)
-  return ((xp || 0) % 500);
+  // XP toward next muscle level (0–4999)
+  return ((xp || 0) % 5000);
 }
 
 async function loadProfile(uid) {
@@ -445,7 +445,7 @@ async function loadProfile(uid) {
 
     const data = doc.data();
     const muscles = data.muscles || emptyMuscles();
-    const nextLevelXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 100;
+    const nextLevelXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 1000;
 
     // Header
     const header = document.getElementById('profile-header');
@@ -469,7 +469,7 @@ async function loadProfile(uid) {
     sorted.forEach(({ name, xp }) => {
       const lvl = muscleLevel(xp);
       const prog = muscleProgress(xp);
-      const progPct = Math.floor((prog / 500) * 100);
+      const progPct = Math.floor((prog / 5000) * 100);
       html += `
         <div class="muscle-card">
           <div class="muscle-name">${name}</div>
@@ -478,7 +478,7 @@ async function loadProfile(uid) {
           <div class="progress-bar">
             <div class="progress-fill" style="width: ${progPct}%"></div>
           </div>
-          <div class="muscle-next">${prog}/500 to next</div>
+          <div class="muscle-next">${prog}/5000 to next</div>
         </div>
       `;
     });
@@ -665,7 +665,7 @@ async function logWorkout() {
     let newXP = (data.xp || 0) + xpGain;
     let newLevel = data.level || 1;
 
-    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
+    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 1000) {
       newLevel++;
     }
 
@@ -800,7 +800,7 @@ async function undoLastSet() {
     // Subtract XP and recalculate level from the new total
     let newXP = Math.max(0, (data.xp || 0) - xpGain);
     let newLevel = 1;
-    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
+    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 1000) {
       newLevel++;
     }
 
@@ -896,7 +896,7 @@ async function logCardio() {
     let newXP = (data.xp || 0) + xpGain;
     let newLevel = data.level || 1;
 
-    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
+    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 1000) {
       newLevel++;
     }
 
@@ -1020,7 +1020,7 @@ async function undoLastCardio() {
     // Subtract XP and recalculate level from the new total
     let newXP = Math.max(0, (data.xp || 0) - xpGain);
     let newLevel = 1;
-    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 100) {
+    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 1000) {
       newLevel++;
     }
 
