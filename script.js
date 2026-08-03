@@ -1606,6 +1606,7 @@ function buildExerciseRowHtml(index, data) {
   const setsVal = data && !isCardio ? (data.sets || 3) : 3;
   const repsVal = data && !isCardio ? (data.suggestedReps || 10) : 10;
   const kmVal = data && isCardio ? (data.suggestedKm || 5) : 5;
+  const notesVal = data && data.notes ? escapeHtml(data.notes) : '';
 
   // Type-specific inputs
   let typeInputs;
@@ -1632,6 +1633,10 @@ function buildExerciseRowHtml(index, data) {
       <div class="row-inputs">
         <select class="ex-name" onchange="onExerciseTypeChange(this)">${options}</select>
         <span class="ex-type-inputs">${typeInputs}</span>
+      </div>
+      <div class="ex-notes-row">
+        <label style="font-size:13px;color:#88ff88;">Note (optional, max 100)</label>
+        <input type="text" class="ex-notes" maxlength="100" placeholder="Tip or instruction for other players…" value="${notesVal}">
       </div>
     </div>
   `;
@@ -1746,9 +1751,15 @@ async function saveTrain() {
   for (const row of exerciseRows) {
     const sel = row.querySelector('.ex-name');
     const exercise = sel ? sel.value : '';
+    const notesInp = row.querySelector('.ex-notes');
+    const notes = notesInp ? notesInp.value.trim() : '';
 
     if (!exercise) {
       await showAlert('Please select an exercise for every row.');
+      return;
+    }
+    if (notes.length > 100) {
+      await showAlert(`Note for "${exercise}" is too long (max 100 characters).`);
       return;
     }
 
@@ -1759,11 +1770,9 @@ async function saveTrain() {
         await showAlert(`Invalid suggested kilometers for "${exercise}".`);
         return;
       }
-      exercises.push({
-        exercise,
-        type: 'cardio',
-        suggestedKm
-      });
+      const entry = { exercise, type: 'cardio', suggestedKm };
+      if (notes) entry.notes = notes;
+      exercises.push(entry);
     } else {
       const setsInp = row.querySelector('.ex-sets');
       const repsInp = row.querySelector('.ex-reps');
@@ -1778,12 +1787,9 @@ async function saveTrain() {
         await showAlert(`Invalid suggested reps for "${exercise}".`);
         return;
       }
-      exercises.push({
-        exercise,
-        type: 'strength',
-        sets,
-        suggestedReps
-      });
+      const entry = { exercise, type: 'strength', sets, suggestedReps };
+      if (notes) entry.notes = notes;
+      exercises.push(entry);
     }
   }
 
@@ -1935,9 +1941,13 @@ async function startTrainSession(trainId) {
     train.exercises.forEach((ex, exIdx) => {
       const isCardio = ex.type === 'cardio' || isCardioExercise(ex.exercise);
       const icon = isCardio ? '🏃 ' : '';
+      const noteHtml = ex.notes
+        ? `<div class="session-note">📝 ${escapeHtml(ex.notes)}</div>`
+        : '';
       html += `
         <div class="session-exercise" data-ex-index="${exIdx}" data-type="${isCardio ? 'cardio' : 'strength'}">
           <div class="session-exercise-title">${exIdx + 1}. ${icon}${escapeHtml(ex.exercise)}</div>
+          ${noteHtml}
       `;
 
       if (isCardio) {
