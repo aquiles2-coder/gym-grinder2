@@ -568,7 +568,8 @@ async function handleRegister() {
       lastDailyReset: getTodayString(),
       lastWeeklyReset: getWeekStartString(),
       muscles: emptyMuscles(),
-      weeklyMuscles: emptyMuscles()
+      weeklyMuscles: emptyMuscles(),
+      trainCount: 0             // used by security rules to enforce max 6 trains
     });
     await showAlert('✅ Account created!\n\nWaiting for approval.\nYou will be able to play once the app owner activates your account in Firebase.');
   } catch (error) {
@@ -648,6 +649,20 @@ async function loadUserData(uid) {
         updates.weeklyMuscles = emptyMuscles();
         updates.lastWeeklyReset = weekStart;
       }
+
+      // Ensure trainCount exists and is in sync with real number of trains
+      // (needed for the security rule that enforces max 6 trains)
+      if (typeof data.trainCount !== 'number') {
+        try {
+          const trainSnap = await db.collection('trains')
+            .where('createdBy', '==', uid)
+            .get();
+          updates.trainCount = trainSnap.size;
+        } catch (e) {
+          updates.trainCount = 0;
+        }
+      }
+
       if (Object.keys(updates).length > 0) {
         await db.collection('users').doc(uid).update(updates);
       }
@@ -1548,7 +1563,18 @@ async function deleteTrain(trainId, name) {
       await showAlert('You can only delete your own trains.');
       return;
     }
-    await db.collection('trains').doc(trainId).delete();
+
+    // Delete train + decrement trainCount in one batch
+    const batch = db.batch();
+    batch.delete(db.collection('trains').doc(trainId));
+    const userRef = db.collection('users').doc(currentUser.uid);
+    // Use increment(-1). Client UI already prevents going below 0,
+    // and the security rule treats missing/negative gracefully via the check.
+    batch.update(userRef, {
+      trainCount: firebase.firestore.FieldValue.increment(-1)
+    });
+    await batch.commit();
+
     await showAlert('Train deleted.');
     loadBuilder();
   } catch (e) {
@@ -1869,8 +1895,17 @@ async function saveTrain() {
       await db.collection('trains').doc(editingTrainId).update(payload);
       await showAlert('Train updated!');
     } else {
+      // Create train + increment trainCount in one batch
+      // so the security rule (max 6) stays accurate
       payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('trains').add(payload);
+      const batch = db.batch();
+      const newTrainRef = db.collection('trains').doc(); // auto-id
+      batch.set(newTrainRef, payload);
+      const userRef = db.collection('users').doc(currentUser.uid);
+      batch.update(userRef, {
+        trainCount: firebase.firestore.FieldValue.increment(1)
+      });
+      await batch.commit();
       await showAlert('Train created! It is now available for every player.');
     }
 
