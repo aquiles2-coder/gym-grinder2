@@ -32,6 +32,8 @@
       <nav class="nav-tabs">
         <button class="tab-btn active" data-tab="workout">Workout</button>
         <button class="tab-btn" data-tab="cardio">Cardio</button>
+        <button class="tab-btn" data-tab="builder">Builder</button>
+        <button class="tab-btn" data-tab="trains">Trains</button>
         <button class="tab-btn" data-tab="history">History</button>
         <button class="tab-btn" data-tab="weekly">Weekly</button>
         <button class="tab-btn" data-tab="profile">Profile</button>
@@ -57,6 +59,24 @@
         <button id="cardio-confirm-btn">CONFIRM 🏃</button>
         <button id="cardio-undo-btn" style="display: none;">UNDO LAST ↩️</button>
         <p id="cardio-log-message"></p>
+      </section>
+
+      <!-- Builder section – create / edit personal trains (max 6) -->
+      <section id="builder" class="tab-content" style="display: none;">
+        <h2>🏗️ Train Builder</h2>
+        <p class="hint">Create up to 6 trains. They become available for every player. Min. 3 exercises per train.</p>
+        <div id="builder-status" class="stats"></div>
+        <div id="builder-my-trains"></div>
+        <button id="builder-create-btn" type="button">+ Create New Train</button>
+        <div id="builder-form" style="display: none;"></div>
+      </section>
+
+      <!-- Trains section – use any pre-prepared train -->
+      <section id="trains" class="tab-content" style="display: none;">
+        <h2>📋 Pre-prepared Trains</h2>
+        <p class="hint">Select a train, fill weight &amp; reps for every set, then confirm to gain XP.</p>
+        <div id="trains-list"></div>
+        <div id="trains-session" style="display: none;"></div>
       </section>
 
       <!-- History section – last 30 confirmed sets -->
