@@ -570,13 +570,36 @@ async function handleRegister() {
       muscles: emptyMuscles(),
       weeklyMuscles: emptyMuscles()
     });
-    await showAlert('✅ Account created!\n\nWaiting for admin approval.\nYou will be able to play once an admin activates your account.');
+    await showAlert('✅ Account created!\n\nWaiting for approval.\nYou will be able to play once the app owner activates your account in Firebase.');
   } catch (error) {
     if (error.code === 'auth/email-already-in-use') {
       await showAlert('This nickname is already taken. Please choose another one.');
     } else {
       await showAlert('Registration error: ' + error.message);
     }
+  }
+}
+
+/**
+ * Keep the public leaderboard entry in sync with the private user document.
+ * Only writes the fields allowed by the Firestore rules for /leaderboards.
+ * Called after every relevant user-data change and on every login of an approved player.
+ */
+async function syncLeaderboard(uid, data) {
+  if (!uid || !data) return;
+  try {
+    await db.collection('leaderboards').doc(uid).set({
+      nickname: data.nickname || 'Unknown',
+      level: data.level || 1,
+      xp: data.xp || 0,
+      dailyXP: data.dailyXP || 0,
+      weeklyXP: data.weeklyXP || 0,
+      lastDailyReset: data.lastDailyReset || getTodayString(),
+      lastWeeklyReset: data.lastWeeklyReset || getWeekStartString(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {
+    console.error('syncLeaderboard error:', e);
   }
 }
 
@@ -628,6 +651,11 @@ async function loadUserData(uid) {
       if (Object.keys(updates).length > 0) {
         await db.collection('users').doc(uid).update(updates);
       }
+
+      // Always keep the public leaderboard entry up to date
+      // (also creates it the first time an approved user logs in)
+      const finalData = { ...data, ...updates };
+      await syncLeaderboard(uid, finalData);
     }
   } catch (e) {
     console.error('loadUserData error:', e);
@@ -1294,9 +1322,12 @@ async function undoLastCardio() {
 }
 
 async function loadLeaderboards() {
+  // Public ranking data lives in the separate /leaderboards collection
+  // (users collection is private – only the owner can read their own document)
+
   // ── Global (by Level) ───────────────────────────────────
   try {
-    const globalSnap = await db.collection('users').orderBy('level', 'desc').limit(20).get();
+    const globalSnap = await db.collection('leaderboards').orderBy('level', 'desc').limit(20).get();
     let html = '<h3>🌍 Global Top 20</h3><ol>';
     globalSnap.forEach(doc => {
       const d = doc.data();
@@ -1312,7 +1343,7 @@ async function loadLeaderboards() {
   // ── Daily (by highest dailyXP) – only active players ────
   try {
     const today = getTodayString();
-    const dailySnap = await db.collection('users')
+    const dailySnap = await db.collection('leaderboards')
       .orderBy('dailyXP', 'desc')
       .limit(30) // fetch more so we can filter down to 10 active
       .get();
@@ -1343,7 +1374,7 @@ async function loadLeaderboards() {
   // ── Weekly (by highest weeklyXP) – only active players ──
   try {
     const weekStart = getWeekStartString();
-    const weeklySnap = await db.collection('users')
+    const weeklySnap = await db.collection('leaderboards')
       .orderBy('weeklyXP', 'desc')
       .limit(30) // fetch more so we can filter down to 10 active
       .get();
