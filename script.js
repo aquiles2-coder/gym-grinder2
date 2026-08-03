@@ -7,6 +7,8 @@ let lastLoggedCardio = null; // stores the most recent cardio session so we can 
 // Train Builder / Pre-prepared Trains state
 let editingTrainId = null;          // null = creating new, string = editing existing
 let currentTrainSession = null;     // the train object currently being performed
+let allTrainsCache = [];            // cached trains for body-part filtering
+let selectedBodyFilter = null;      // currently selected body part on Trains tab
 const MAX_TRAINS_PER_PLAYER = 6;
 const MIN_EXERCISES_PER_TRAIN = 3;
 const MAX_EXERCISES_PER_TRAIN = 10;
@@ -1374,9 +1376,9 @@ async function loadLeaderboards() {
 //  TRAIN BUILDER  +  PRE-PREPARED TRAINS
 // ═══════════════════════════════════════════════════════════
 
-/** Body parts available as tags (includes Cardio) */
+/** Body parts available as tags (Full Body + all muscles including Cardio) */
 function getBodyPartOptions() {
-  return ALL_MUSCLES.slice(); // all muscles including Cardio
+  return ['Full Body', ...ALL_MUSCLES];
 }
 
 /** Sorted list of all exercises (strength + cardio) */
@@ -1861,6 +1863,7 @@ async function loadTrainsList() {
     sessionEl.innerHTML = '';
   }
   currentTrainSession = null;
+  selectedBodyFilter = null;
   listEl.style.display = 'block';
   listEl.innerHTML = '<p class="hint">Loading trains…</p>';
 
@@ -1868,47 +1871,105 @@ async function loadTrainsList() {
     // Prefer ordered query; fall back to unordered if index missing
     let snap;
     try {
-      snap = await db.collection('trains').orderBy('createdAt', 'desc').limit(50).get();
+      snap = await db.collection('trains').orderBy('createdAt', 'desc').limit(80).get();
     } catch (orderErr) {
       console.warn('orderBy createdAt failed, falling back:', orderErr);
-      snap = await db.collection('trains').limit(50).get();
+      snap = await db.collection('trains').limit(80).get();
     }
 
-    if (snap.empty) {
-      listEl.innerHTML = '<p class="hint">No trains created yet. Go to the Builder tab and make one!</p>';
-      return;
-    }
+    // Cache all trains (sorted newest first)
+    allTrainsCache = snap.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() || 0;
+        const tb = b.createdAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
 
-    // Client-side sort as safety
-    const docs = snap.docs.slice().sort((a, b) => {
-      const ta = a.data().createdAt?.toMillis?.() || 0;
-      const tb = b.data().createdAt?.toMillis?.() || 0;
-      return tb - ta;
-    });
-
-    let html = '';
-    docs.forEach(doc => {
-      const t = doc.data();
-      const bodyTags = (t.bodyParts || []).map(b => `<span>${b}</span>`).join('');
-      const exCount = (t.exercises || []).length;
-      html += `
-        <div class="train-card">
-          <div class="train-card-header">
-            <div class="train-name">${escapeHtml(t.name)}</div>
-          </div>
-          <div class="train-meta">by ${escapeHtml(t.createdByNickname || 'Unknown')} · ${exCount} exercises</div>
-          <div class="train-bodyparts">${bodyTags || '—'}</div>
-          <div class="train-actions">
-            <button type="button" class="btn-small" onclick="startTrainSession('${doc.id}')">Use this train</button>
-          </div>
-        </div>
-      `;
-    });
-    listEl.innerHTML = html;
+    renderTrainsFilterAndList();
   } catch (e) {
     console.error('loadTrainsList error:', e);
     listEl.innerHTML = '<p class="hint">Could not load trains. Check console / Firestore rules.</p>';
   }
+}
+
+/** Render body-part filter chips + the matching train cards */
+function renderTrainsFilterAndList() {
+  const listEl = document.getElementById('trains-list');
+  if (!listEl) return;
+
+  if (allTrainsCache.length === 0) {
+    listEl.innerHTML = '<p class="hint">No trains created yet. Go to the Builder tab and make one!</p>';
+    return;
+  }
+
+  // Only show body parts that are actually used on at least one train
+  const usedParts = new Set();
+  allTrainsCache.forEach(t => {
+    (t.bodyParts || []).forEach(p => usedParts.add(p));
+  });
+
+  // Order follows getBodyPartOptions (Full Body first, then muscles)
+  const filterParts = getBodyPartOptions().filter(p => usedParts.has(p));
+
+  let html = `
+    <div class="body-filter-section">
+      <p class="hint" style="margin-bottom:10px;">1. Select the body part you want to train:</p>
+      <div class="body-filter-grid" id="body-filter-grid">
+  `;
+
+  filterParts.forEach(part => {
+    const active = selectedBodyFilter === part ? 'active' : '';
+    html += `<button type="button" class="body-filter-chip ${active}" onclick="selectBodyFilter('${escapeHtml(part)}')">${escapeHtml(part)}</button>`;
+  });
+
+  // Optional "All" chip
+  const allActive = selectedBodyFilter === '__all__' ? 'active' : '';
+  html += `<button type="button" class="body-filter-chip ${allActive}" onclick="selectBodyFilter('__all__')">All</button>`;
+
+  html += `
+      </div>
+    </div>
+    <div id="trains-filtered-list">
+  `;
+
+  if (!selectedBodyFilter) {
+    html += `<p class="hint">Select a body part above to see the available trains.</p>`;
+  } else {
+    const filtered = selectedBodyFilter === '__all__'
+      ? allTrainsCache
+      : allTrainsCache.filter(t => (t.bodyParts || []).includes(selectedBodyFilter));
+
+    if (filtered.length === 0) {
+      html += `<p class="hint">No trains tagged with "${escapeHtml(selectedBodyFilter)}".</p>`;
+    } else {
+      html += `<p class="hint" style="margin-bottom:12px;">2. Choose a train:</p>`;
+      filtered.forEach(t => {
+        const bodyTags = (t.bodyParts || []).map(b => `<span>${escapeHtml(b)}</span>`).join('');
+        const exCount = (t.exercises || []).length;
+        html += `
+          <div class="train-card">
+            <div class="train-card-header">
+              <div class="train-name">${escapeHtml(t.name)}</div>
+            </div>
+            <div class="train-meta">by ${escapeHtml(t.createdByNickname || 'Unknown')} · ${exCount} exercises</div>
+            <div class="train-bodyparts">${bodyTags || '—'}</div>
+            <div class="train-actions">
+              <button type="button" class="btn-small" onclick="startTrainSession('${t.id}')">Use this train</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+  }
+
+  html += `</div>`;
+  listEl.innerHTML = html;
+}
+
+function selectBodyFilter(part) {
+  selectedBodyFilter = part; // body part name, or '__all__'
+  renderTrainsFilterAndList();
 }
 
 async function startTrainSession(trainId) {
