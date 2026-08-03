@@ -465,3 +465,269 @@ select:focus, input[type="number"]:focus {
   color: black;
 }
 
+/* ─── Train Builder & Pre-prepared Trains ─────────────────── */
+.train-card {
+  background: rgba(10, 10, 10, 0.7);
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 0 auto 12px;
+  max-width: 520px;
+  text-align: left;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s, border-color 0.2s;
+}
+
+.train-card:hover {
+  transform: scale(1.02);
+  border-color: #ffff00;
+}
+
+.train-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.train-name {
+  font-size: 18px;
+  font-weight: bold;
+  color: #ffff00;
+}
+
+.train-meta {
+  font-size: 13px;
+  color: #88ff88;
+  margin-bottom: 8px;
+}
+
+.train-bodyparts {
+  font-size: 12px;
+  color: #66aa66;
+  margin-bottom: 10px;
+}
+
+.train-bodyparts span {
+  display: inline-block;
+  background: rgba(0, 80, 0, 0.5);
+  border: 1px solid rgba(0, 255, 0, 0.25);
+  border-radius: 4px;
+  padding: 2px 7px;
+  margin: 2px 3px 2px 0;
+}
+
+.train-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.train-actions button {
+  font-size: 14px;
+  padding: 8px 14px;
+  margin: 0;
+}
+
+.btn-small {
+  font-size: 14px !important;
+  padding: 8px 14px !important;
+  margin: 4px !important;
+}
+
+.btn-danger {
+  background: #aa2200 !important;
+}
+
+.btn-danger:hover {
+  background: #ff4400 !important;
+  color: white !important;
+}
+
+.btn-secondary {
+  background: #444 !important;
+}
+
+.btn-secondary:hover {
+  background: #666 !important;
+  color: white !important;
+}
+
+/* Builder form */
+#builder-form {
+  max-width: 540px;
+  margin: 20px auto;
+  text-align: left;
+  background: rgba(10, 10, 10, 0.75);
+  border: 1px solid rgba(0, 255, 0, 0.35);
+  border-radius: 12px;
+  padding: 18px 16px;
+}
+
+.builder-field {
+  margin-bottom: 14px;
+}
+
+.builder-field label {
+  display: block;
+  font-size: 14px;
+  color: #88ff88;
+  margin-bottom: 5px;
+}
+
+.builder-field input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 17px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 0, 0.4);
+  background: rgba(20, 20, 20, 0.9);
+  color: #00ff00;
+  outline: none;
+}
+
+.builder-field input[type="text"]:focus {
+  border-color: #ffff00;
+  box-shadow: 0 0 8px rgba(255, 255, 0, 0.3);
+}
+
+.bodypart-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bodypart-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 40, 0, 0.6);
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 13px;
+  color: #88ff88;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bodypart-chip input {
+  margin: 0;
+  accent-color: #00ff00;
+}
+
+.bodypart-chip.selected {
+  background: rgba(0, 100, 0, 0.7);
+  border-color: #00ff00;
+  color: #00ff00;
+}
+
+.exercise-row {
+  background: rgba(0, 30, 0, 0.5);
+  border: 1px solid rgba(0, 255, 0, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.exercise-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #ffff00;
+}
+
+.exercise-row select,
+.exercise-row input[type="number"] {
+  font-size: 15px;
+  padding: 7px 10px;
+  margin: 3px 4px 3px 0;
+  max-width: 100%;
+}
+
+.exercise-row .row-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Trains session form (use a train) */
+#trains-session {
+  max-width: 540px;
+  margin: 16px auto 30px;
+  text-align: left;
+}
+
+.session-exercise {
+  background: rgba(10, 10, 10, 0.7);
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.session-exercise-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffff00;
+  margin-bottom: 8px;
+}
+
+.session-set-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0, 255, 0, 0.12);
+}
+
+.session-set-row:last-child {
+  border-bottom: none;
+}
+
+.session-set-label {
+  font-size: 13px;
+  color: #88ff88;
+  min-width: 70px;
+}
+
+.session-set-row input[type="number"] {
+  font-size: 15px;
+  padding: 7px 10px;
+  width: 90px;
+  margin: 0;
+}
+
+.session-suggested {
+  font-size: 12px;
+  color: #66aa66;
+}
+
+.session-actions {
+  text-align: center;
+  margin-top: 18px;
+}
+
+.session-total {
+  text-align: center;
+  font-size: 16px;
+  color: #00ff88;
+  margin: 12px 0;
+}
+
+/* History train badge */
+.set-train {
+  font-size: 12px;
+  color: #ffaa00;
+  margin-bottom: 3px;
+}
+
