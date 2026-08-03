@@ -688,6 +688,50 @@ select:focus, input[type="number"]:focus {
   color: #448844;
 }
 
+/* Body-part filter on Trains tab */
+.body-filter-section {
+  max-width: 520px;
+  margin: 0 auto 18px;
+}
+
+.body-filter-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.body-filter-chip {
+  font-size: 13px !important;
+  padding: 8px 14px !important;
+  margin: 0 !important;
+  background: rgba(40, 40, 40, 0.85) !important;
+  color: #00ff00 !important;
+  border: 1px solid rgba(0, 255, 0, 0.35) !important;
+  border-radius: 20px !important;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.12s;
+}
+
+.body-filter-chip:hover {
+  background: rgba(0, 80, 0, 0.7) !important;
+  color: #ffff00 !important;
+  transform: scale(1.04);
+}
+
+.body-filter-chip.active {
+  background: #ff0000 !important;
+  color: white !important;
+  border-color: #ff0000 !important;
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.4);
+}
+
+.body-filter-chip.active:hover {
+  background: #ffff00 !important;
+  color: black !important;
+  border-color: #ffff00 !important;
+}
+
 /* Trains session form (use a train) */
 #trains-session {
   max-width: 540px;
