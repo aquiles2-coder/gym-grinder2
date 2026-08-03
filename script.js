@@ -1372,14 +1372,21 @@ async function loadLeaderboards() {
 //  TRAIN BUILDER  +  PRE-PREPARED TRAINS
 // ═══════════════════════════════════════════════════════════
 
-/** Body parts available as tags (exclude Cardio) */
+/** Body parts available as tags (includes Cardio) */
 function getBodyPartOptions() {
-  return ALL_MUSCLES.filter(m => m !== 'Cardio');
+  return ALL_MUSCLES.slice(); // all muscles including Cardio
 }
 
-/** Sorted list of strength exercises */
+/** Sorted list of all exercises (strength + cardio) */
 function getExerciseNames() {
-  return Object.keys(exerciseFactors).sort();
+  const strength = Object.keys(exerciseFactors);
+  const cardio = Object.keys(cardioCoefficients);
+  return [...strength, ...cardio].sort();
+}
+
+/** True if the exercise is a cardio activity */
+function isCardioExercise(name) {
+  return Object.prototype.hasOwnProperty.call(cardioCoefficients, name);
 }
 
 /** Fetch current user's nickname (cached on user doc) */
@@ -1588,13 +1595,33 @@ function showBuilderForm(trainData) {
 
 function buildExerciseRowHtml(index, data) {
   const exerciseNames = getExerciseNames();
+  const isCardio = data && (data.type === 'cardio' || isCardioExercise(data.exercise));
   let options = '<option value="">— select exercise —</option>';
   exerciseNames.forEach(name => {
     const sel = data && data.exercise === name ? 'selected' : '';
-    options += `<option value="${escapeHtml(name)}" ${sel}>${escapeHtml(name)}</option>`;
+    const prefix = isCardioExercise(name) ? '🏃 ' : '';
+    options += `<option value="${escapeHtml(name)}" ${sel}>${prefix}${escapeHtml(name)}</option>`;
   });
-  const setsVal = data ? (data.sets || 3) : 3;
-  const repsVal = data ? (data.suggestedReps || 10) : 10;
+
+  const setsVal = data && !isCardio ? (data.sets || 3) : 3;
+  const repsVal = data && !isCardio ? (data.suggestedReps || 10) : 10;
+  const kmVal = data && isCardio ? (data.suggestedKm || 5) : 5;
+
+  // Type-specific inputs
+  let typeInputs;
+  if (isCardio) {
+    typeInputs = `
+      <label style="font-size:13px;color:#88ff88;">Suggested km</label>
+      <input type="number" class="ex-km" min="0.1" step="0.1" max="100" value="${kmVal}" style="width:90px;">
+    `;
+  } else {
+    typeInputs = `
+      <label style="font-size:13px;color:#88ff88;">Sets</label>
+      <input type="number" class="ex-sets" min="1" max="20" value="${setsVal}" style="width:70px;">
+      <label style="font-size:13px;color:#88ff88;">Suggested reps</label>
+      <input type="number" class="ex-reps" min="1" max="100" value="${repsVal}" style="width:70px;">
+    `;
+  }
 
   return `
     <div class="exercise-row" data-index="${index}">
@@ -1603,14 +1630,39 @@ function buildExerciseRowHtml(index, data) {
         <button type="button" class="btn-small btn-danger" onclick="removeExerciseRow(this)">Remove</button>
       </div>
       <div class="row-inputs">
-        <select class="ex-name">${options}</select>
-        <label style="font-size:13px;color:#88ff88;">Sets</label>
-        <input type="number" class="ex-sets" min="1" max="20" value="${setsVal}" style="width:70px;">
-        <label style="font-size:13px;color:#88ff88;">Suggested reps</label>
-        <input type="number" class="ex-reps" min="1" max="100" value="${repsVal}" style="width:70px;">
+        <select class="ex-name" onchange="onExerciseTypeChange(this)">${options}</select>
+        <span class="ex-type-inputs">${typeInputs}</span>
       </div>
     </div>
   `;
+}
+
+/** When the player picks a different exercise, switch between strength / cardio inputs */
+function onExerciseTypeChange(selectEl) {
+  const row = selectEl.closest('.exercise-row');
+  if (!row) return;
+  const container = row.querySelector('.ex-type-inputs');
+  if (!container) return;
+
+  const name = selectEl.value;
+  if (!name) {
+    container.innerHTML = '';
+    return;
+  }
+
+  if (isCardioExercise(name)) {
+    container.innerHTML = `
+      <label style="font-size:13px;color:#88ff88;">Suggested km</label>
+      <input type="number" class="ex-km" min="0.1" step="0.1" max="100" value="5" style="width:90px;">
+    `;
+  } else {
+    container.innerHTML = `
+      <label style="font-size:13px;color:#88ff88;">Sets</label>
+      <input type="number" class="ex-sets" min="1" max="20" value="3" style="width:70px;">
+      <label style="font-size:13px;color:#88ff88;">Suggested reps</label>
+      <input type="number" class="ex-reps" min="1" max="100" value="10" style="width:70px;">
+    `;
+  }
 }
 
 function addExerciseRow() {
@@ -1691,29 +1743,48 @@ async function saveTrain() {
   }
 
   const exercises = [];
-  const usedNames = new Set();
   for (const row of exerciseRows) {
     const sel = row.querySelector('.ex-name');
-    const setsInp = row.querySelector('.ex-sets');
-    const repsInp = row.querySelector('.ex-reps');
     const exercise = sel ? sel.value : '';
-    const sets = setsInp ? parseInt(setsInp.value, 10) : 0;
-    const suggestedReps = repsInp ? parseInt(repsInp.value, 10) : 0;
 
     if (!exercise) {
       await showAlert('Please select an exercise for every row.');
       return;
     }
-    if (isNaN(sets) || sets < 1) {
-      await showAlert(`Invalid sets for "${exercise}".`);
-      return;
+
+    if (isCardioExercise(exercise)) {
+      const kmInp = row.querySelector('.ex-km');
+      const suggestedKm = kmInp ? parseFloat(kmInp.value) : NaN;
+      if (isNaN(suggestedKm) || suggestedKm <= 0) {
+        await showAlert(`Invalid suggested kilometers for "${exercise}".`);
+        return;
+      }
+      exercises.push({
+        exercise,
+        type: 'cardio',
+        suggestedKm
+      });
+    } else {
+      const setsInp = row.querySelector('.ex-sets');
+      const repsInp = row.querySelector('.ex-reps');
+      const sets = setsInp ? parseInt(setsInp.value, 10) : 0;
+      const suggestedReps = repsInp ? parseInt(repsInp.value, 10) : 0;
+
+      if (isNaN(sets) || sets < 1) {
+        await showAlert(`Invalid sets for "${exercise}".`);
+        return;
+      }
+      if (isNaN(suggestedReps) || suggestedReps < 1) {
+        await showAlert(`Invalid suggested reps for "${exercise}".`);
+        return;
+      }
+      exercises.push({
+        exercise,
+        type: 'strength',
+        sets,
+        suggestedReps
+      });
     }
-    if (isNaN(suggestedReps) || suggestedReps < 1) {
-      await showAlert(`Invalid suggested reps for "${exercise}".`);
-      return;
-    }
-    // Allow same exercise multiple times? Yes – different set schemes possible.
-    exercises.push({ exercise, sets, suggestedReps });
   }
 
   try {
@@ -1858,23 +1929,38 @@ async function startTrainSession(trainId) {
         <strong>${escapeHtml(train.name)}</strong><br>
         <span style="font-size:13px;color:#88ff88;">by ${escapeHtml(train.createdByNickname || 'Unknown')}</span>
       </div>
-      <p class="hint" style="text-align:center;">Fill weight (kg) and actual reps for every set, then confirm.</p>
+      <p class="hint" style="text-align:center;">Fill the values for every exercise, then confirm.</p>
     `;
 
     train.exercises.forEach((ex, exIdx) => {
+      const isCardio = ex.type === 'cardio' || isCardioExercise(ex.exercise);
+      const icon = isCardio ? '🏃 ' : '';
       html += `
-        <div class="session-exercise" data-ex-index="${exIdx}">
-          <div class="session-exercise-title">${exIdx + 1}. ${escapeHtml(ex.exercise)}</div>
+        <div class="session-exercise" data-ex-index="${exIdx}" data-type="${isCardio ? 'cardio' : 'strength'}">
+          <div class="session-exercise-title">${exIdx + 1}. ${icon}${escapeHtml(ex.exercise)}</div>
       `;
-      for (let s = 1; s <= ex.sets; s++) {
+
+      if (isCardio) {
+        const suggested = ex.suggestedKm != null ? ex.suggestedKm : 5;
         html += `
-          <div class="session-set-row" data-set="${s}">
-            <span class="session-set-label">Set ${s}</span>
-            <input type="number" class="set-weight" placeholder="kg" step="0.5" min="0" data-ex="${exIdx}" data-set="${s}">
-            <input type="number" class="set-reps" placeholder="reps" min="1" data-ex="${exIdx}" data-set="${s}">
-            <span class="session-suggested">suggested ${ex.suggestedReps} reps</span>
+          <div class="session-set-row">
+            <span class="session-set-label">Distance</span>
+            <input type="number" class="set-km" placeholder="km" step="0.1" min="0.1" data-ex="${exIdx}">
+            <span class="session-suggested">suggested ${suggested} km</span>
           </div>
         `;
+      } else {
+        const sets = ex.sets || 1;
+        for (let s = 1; s <= sets; s++) {
+          html += `
+            <div class="session-set-row" data-set="${s}">
+              <span class="session-set-label">Set ${s}</span>
+              <input type="number" class="set-weight" placeholder="kg" step="0.5" min="0" data-ex="${exIdx}" data-set="${s}">
+              <input type="number" class="set-reps" placeholder="reps" min="1" data-ex="${exIdx}" data-set="${s}">
+              <span class="session-suggested">suggested ${ex.suggestedReps || 10} reps</span>
+            </div>
+          `;
+        }
       }
       html += `</div>`;
     });
@@ -1890,8 +1976,8 @@ async function startTrainSession(trainId) {
     sessionEl.innerHTML = html;
     sessionEl.style.display = 'block';
 
-    // Live XP preview (optional nicety)
-    sessionEl.querySelectorAll('.set-weight, .set-reps').forEach(inp => {
+    // Live XP preview
+    sessionEl.querySelectorAll('.set-weight, .set-reps, .set-km').forEach(inp => {
       inp.addEventListener('input', updateSessionXpPreview);
     });
   } catch (e) {
@@ -1907,14 +1993,26 @@ function updateSessionXpPreview() {
 
   let total = 0;
   currentTrainSession.exercises.forEach((ex, exIdx) => {
-    for (let s = 1; s <= ex.sets; s++) {
-      const wEl = document.querySelector(`.set-weight[data-ex="${exIdx}"][data-set="${s}"]`);
-      const rEl = document.querySelector(`.set-reps[data-ex="${exIdx}"][data-set="${s}"]`);
-      const weight = wEl ? parseFloat(wEl.value) : NaN;
-      const reps = rEl ? parseInt(rEl.value, 10) : NaN;
-      if (!isNaN(weight) && !isNaN(reps) && reps >= 1) {
-        const factor = exerciseFactors[ex.exercise] ?? 0.1;
-        total += Math.floor(reps * Math.pow(weight * factor, 2));
+    const isCardio = ex.type === 'cardio' || isCardioExercise(ex.exercise);
+
+    if (isCardio) {
+      const kmEl = document.querySelector(`.set-km[data-ex="${exIdx}"]`);
+      const km = kmEl ? parseFloat(kmEl.value) : NaN;
+      if (!isNaN(km) && km > 0) {
+        const coeff = cardioCoefficients[ex.exercise] ?? 0.05;
+        total += Math.floor(coeff * km * 20000);
+      }
+    } else {
+      const sets = ex.sets || 1;
+      for (let s = 1; s <= sets; s++) {
+        const wEl = document.querySelector(`.set-weight[data-ex="${exIdx}"][data-set="${s}"]`);
+        const rEl = document.querySelector(`.set-reps[data-ex="${exIdx}"][data-set="${s}"]`);
+        const weight = wEl ? parseFloat(wEl.value) : NaN;
+        const reps = rEl ? parseInt(rEl.value, 10) : NaN;
+        if (!isNaN(weight) && !isNaN(reps) && reps >= 1) {
+          const factor = exerciseFactors[ex.exercise] ?? 0.1;
+          total += Math.floor(reps * Math.pow(weight * factor, 2));
+        }
       }
     }
   });
@@ -1935,37 +2033,64 @@ async function confirmTrainSession() {
   if (!currentUser || !currentTrainSession) return;
 
   const train = currentTrainSession;
-  const setsToLog = []; // { exercise, weight, reps, xpGain, muscleGains }
+  // Each entry: { type, exercise, weight?, reps?, kilometers?, xpGain, muscleGains }
+  const setsToLog = [];
 
-  // Collect & validate every set
+  // Collect & validate every exercise / set
   for (let exIdx = 0; exIdx < train.exercises.length; exIdx++) {
     const ex = train.exercises[exIdx];
-    for (let s = 1; s <= ex.sets; s++) {
-      const wEl = document.querySelector(`.set-weight[data-ex="${exIdx}"][data-set="${s}"]`);
-      const rEl = document.querySelector(`.set-reps[data-ex="${exIdx}"][data-set="${s}"]`);
-      const weight = wEl ? parseFloat(wEl.value) : NaN;
-      const reps = rEl ? parseInt(rEl.value, 10) : NaN;
+    const isCardio = ex.type === 'cardio' || isCardioExercise(ex.exercise);
 
-      if (isNaN(weight) || weight < 0 || isNaN(reps) || reps < 1) {
-        await showAlert(`Please fill valid weight and reps for:\n${ex.exercise} — Set ${s}`);
+    if (isCardio) {
+      const kmEl = document.querySelector(`.set-km[data-ex="${exIdx}"]`);
+      const km = kmEl ? parseFloat(kmEl.value) : NaN;
+
+      if (isNaN(km) || km <= 0) {
+        await showAlert(`Please fill a valid distance (km) for:\n${ex.exercise}`);
         return;
       }
 
-      const factor = exerciseFactors[ex.exercise] ?? 0.1;
-      const xpGain = Math.floor(reps * Math.pow(weight * factor, 2));
-      const muscleMap = exerciseMuscles[ex.exercise] || {};
-      const muscleGains = {};
-      for (const [muscle, pct] of Object.entries(muscleMap)) {
-        muscleGains[muscle] = Math.floor(xpGain * (pct / 100));
-      }
+      const coeff = cardioCoefficients[ex.exercise] ?? 0.05;
+      const xpGain = Math.floor(coeff * km * 20000);
+      const muscleGains = { Cardio: xpGain };
 
       setsToLog.push({
+        type: 'cardio',
         exercise: ex.exercise,
-        weight,
-        reps,
+        kilometers: km,
         xpGain,
         muscleGains
       });
+    } else {
+      const sets = ex.sets || 1;
+      for (let s = 1; s <= sets; s++) {
+        const wEl = document.querySelector(`.set-weight[data-ex="${exIdx}"][data-set="${s}"]`);
+        const rEl = document.querySelector(`.set-reps[data-ex="${exIdx}"][data-set="${s}"]`);
+        const weight = wEl ? parseFloat(wEl.value) : NaN;
+        const reps = rEl ? parseInt(rEl.value, 10) : NaN;
+
+        if (isNaN(weight) || weight < 0 || isNaN(reps) || reps < 1) {
+          await showAlert(`Please fill valid weight and reps for:\n${ex.exercise} — Set ${s}`);
+          return;
+        }
+
+        const factor = exerciseFactors[ex.exercise] ?? 0.1;
+        const xpGain = Math.floor(reps * Math.pow(weight * factor, 2));
+        const muscleMap = exerciseMuscles[ex.exercise] || {};
+        const muscleGains = {};
+        for (const [muscle, pct] of Object.entries(muscleMap)) {
+          muscleGains[muscle] = Math.floor(xpGain * (pct / 100));
+        }
+
+        setsToLog.push({
+          type: 'strength',
+          exercise: ex.exercise,
+          weight,
+          reps,
+          xpGain,
+          muscleGains
+        });
+      }
     }
   }
 
@@ -1980,9 +2105,9 @@ async function confirmTrainSession() {
   const confirmMsg =
     `Confirm this train?\n\n` +
     `${train.name}\n` +
-    `${setsToLog.length} sets\n` +
+    `${setsToLog.length} entries\n` +
     `Total +${totalXP} XP\n\n` +
-    `Click OK to save all sets, or Cancel to go back.`;
+    `Click OK to save all, or Cancel to go back.`;
   if (!(await showConfirm(confirmMsg))) return;
 
   // Disable button to prevent double-submit
@@ -2059,23 +2184,33 @@ async function confirmTrainSession() {
       weeklyMuscles: updatedWeeklyMuscles
     });
 
-    // Save every set to history (with trainName)
+    // Save every entry to history (with trainName)
     const setsRef = userRef.collection('sets');
     const batch = db.batch();
-    const newSetRefs = [];
 
     setsToLog.forEach(s => {
-      const ref = setsRef.doc(); // auto-id
-      newSetRefs.push(ref);
-      batch.set(ref, {
-        exercise: s.exercise,
-        weight: s.weight,
-        reps: s.reps,
-        xp: s.xpGain,
-        trainName: train.name,
-        trainId: train.id,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      const ref = setsRef.doc();
+      if (s.type === 'cardio') {
+        batch.set(ref, {
+          type: 'cardio',
+          exercise: s.exercise,
+          kilometers: s.kilometers,
+          xp: s.xpGain,
+          trainName: train.name,
+          trainId: train.id,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } else {
+        batch.set(ref, {
+          exercise: s.exercise,
+          weight: s.weight,
+          reps: s.reps,
+          xp: s.xpGain,
+          trainName: train.name,
+          trainId: train.id,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
     });
     await batch.commit();
 
@@ -2117,4 +2252,5 @@ async function confirmTrainSession() {
     }
   }
 }
+
 
