@@ -658,6 +658,36 @@ select:focus, input[type="number"]:focus {
   gap: 6px;
 }
 
+.ex-notes-row {
+  margin-top: 8px;
+}
+
+.ex-notes-row label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.ex-notes-row .ex-notes {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 255, 0, 0.35);
+  background: rgba(20, 20, 20, 0.9);
+  color: #00ff00;
+  outline: none;
+}
+
+.ex-notes-row .ex-notes:focus {
+  border-color: #ffff00;
+  box-shadow: 0 0 6px rgba(255, 255, 0, 0.25);
+}
+
+.ex-notes-row .ex-notes::placeholder {
+  color: #448844;
+}
+
 /* Trains session form (use a train) */
 #trains-session {
   max-width: 540px;
@@ -677,7 +707,18 @@ select:focus, input[type="number"]:focus {
   font-size: 16px;
   font-weight: bold;
   color: #ffff00;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+}
+
+.session-note {
+  font-size: 13px;
+  color: #ffcc66;
+  background: rgba(80, 50, 0, 0.35);
+  border: 1px solid rgba(255, 180, 0, 0.3);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  line-height: 1.35;
 }
 
 .session-set-row {
@@ -730,4 +771,5 @@ select:focus, input[type="number"]:focus {
   color: #ffaa00;
   margin-bottom: 3px;
 }
+
 
