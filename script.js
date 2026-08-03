@@ -1903,14 +1903,16 @@ function renderTrainsFilterAndList() {
     return;
   }
 
-  // Only show body parts that are actually used on at least one train
+  // Body parts that are actually used on at least one train
   const usedParts = new Set();
   allTrainsCache.forEach(t => {
     (t.bodyParts || []).forEach(p => usedParts.add(p));
   });
 
-  // Order follows getBodyPartOptions (Full Body first, then muscles)
-  const filterParts = getBodyPartOptions().filter(p => usedParts.has(p));
+  // Always show Full Body; then other used tags (order from getBodyPartOptions)
+  const filterParts = getBodyPartOptions().filter(p =>
+    p === 'Full Body' || usedParts.has(p)
+  );
 
   let html = `
     <div class="body-filter-section">
@@ -1923,7 +1925,7 @@ function renderTrainsFilterAndList() {
     html += `<button type="button" class="body-filter-chip ${active}" onclick="selectBodyFilter('${escapeHtml(part)}')">${escapeHtml(part)}</button>`;
   });
 
-  // Optional "All" chip
+  // "All" chip
   const allActive = selectedBodyFilter === '__all__' ? 'active' : '';
   html += `<button type="button" class="body-filter-chip ${allActive}" onclick="selectBodyFilter('__all__')">All</button>`;
 
@@ -2325,5 +2327,4 @@ async function confirmTrainSession() {
     }
   }
 }
-
 
