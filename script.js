@@ -4,6 +4,13 @@ let tabsListenerAttached = false;
 let lastLoggedSet = null; // stores the most recent workout set so we can undo it
 let lastLoggedCardio = null; // stores the most recent cardio session so we can undo it
 
+// Train Builder / Pre-prepared Trains state
+let editingTrainId = null;          // null = creating new, string = editing existing
+let currentTrainSession = null;     // the train object currently being performed
+const MAX_TRAINS_PER_PLAYER = 6;
+const MIN_EXERCISES_PER_TRAIN = 3;
+const MAX_EXERCISES_PER_TRAIN = 10;
+
 // ─── Custom Modal System (replaces alert / confirm / prompt) ───
 let _modalResolve = null;
 
@@ -495,6 +502,12 @@ function setupTabs() {
       if (tab === 'leaderboards') {
         loadLeaderboards();
       }
+      if (tab === 'builder' && currentUser) {
+        loadBuilder();
+      }
+      if (tab === 'trains' && currentUser) {
+        loadTrainsList();
+      }
     });
   });
   tabsListenerAttached = true;
@@ -776,8 +789,12 @@ async function loadHistory(uid) {
       const details = isCardio
         ? `<span>${s.kilometers ?? '—'} km</span>`
         : `<span>${s.weight ?? '—'} kg</span><span>×</span><span>${s.reps ?? '—'} reps</span>`;
+      const trainBadge = s.trainName
+        ? `<div class="set-train">📋 ${s.trainName}</div>`
+        : '';
       html += `
         <div class="set-card">
+          ${trainBadge}
           <div class="set-exercise">${s.exercise || '—'}${isCardio ? ' 🏃' : ''}</div>
           <div class="set-details">
             ${details}
@@ -1350,3 +1367,754 @@ async function loadLeaderboards() {
     console.error('Weekly leaderboard error:', e);
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+//  TRAIN BUILDER  +  PRE-PREPARED TRAINS
+// ═══════════════════════════════════════════════════════════
+
+/** Body parts available as tags (exclude Cardio) */
+function getBodyPartOptions() {
+  return ALL_MUSCLES.filter(m => m !== 'Cardio');
+}
+
+/** Sorted list of strength exercises */
+function getExerciseNames() {
+  return Object.keys(exerciseFactors).sort();
+}
+
+/** Fetch current user's nickname (cached on user doc) */
+async function getCurrentNickname() {
+  if (!currentUser) return 'Unknown';
+  try {
+    const doc = await db.collection('users').doc(currentUser.uid).get();
+    return doc.exists ? (doc.data().nickname || 'Unknown') : 'Unknown';
+  } catch {
+    return 'Unknown';
+  }
+}
+
+// ─── BUILDER TAB ───────────────────────────────────────────
+
+async function loadBuilder() {
+  const listEl = document.getElementById('builder-my-trains');
+  const statusEl = document.getElementById('builder-status');
+  const createBtn = document.getElementById('builder-create-btn');
+  const formEl = document.getElementById('builder-form');
+
+  if (!listEl || !currentUser) return;
+
+  // Hide form when switching back to list
+  if (formEl) formEl.style.display = 'none';
+  editingTrainId = null;
+
+  listEl.innerHTML = '<p class="hint">Loading your trains…</p>';
+
+  try {
+    // No orderBy here to avoid composite-index requirement; sort client-side
+    const snap = await db.collection('trains')
+      .where('createdBy', '==', currentUser.uid)
+      .get();
+
+    const count = snap.size;
+    if (statusEl) {
+      statusEl.innerHTML = `Your trains: <strong>${count} / ${MAX_TRAINS_PER_PLAYER}</strong>`;
+    }
+    if (createBtn) {
+      createBtn.style.display = count >= MAX_TRAINS_PER_PLAYER ? 'none' : 'inline-block';
+      createBtn.onclick = () => showBuilderForm(null);
+    }
+
+    if (snap.empty) {
+      listEl.innerHTML = '<p class="hint">You have no trains yet. Create one!</p>';
+      return;
+    }
+
+    // Sort newest first
+    const docs = snap.docs.slice().sort((a, b) => {
+      const ta = a.data().createdAt?.toMillis?.() || 0;
+      const tb = b.data().createdAt?.toMillis?.() || 0;
+      return tb - ta;
+    });
+
+    let html = '';
+    docs.forEach(doc => {
+      const t = doc.data();
+      const bodyTags = (t.bodyParts || []).map(b => `<span>${b}</span>`).join('');
+      // Escape for HTML attribute (single quotes)
+      const attrName = String(t.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      html += `
+        <div class="train-card" data-id="${doc.id}">
+          <div class="train-card-header">
+            <div class="train-name">${escapeHtml(t.name)}</div>
+          </div>
+          <div class="train-meta">${(t.exercises || []).length} exercises</div>
+          <div class="train-bodyparts">${bodyTags || '—'}</div>
+          <div class="train-actions">
+            <button type="button" class="btn-small" onclick="editTrain('${doc.id}')">Edit</button>
+            <button type="button" class="btn-small btn-danger" onclick="deleteTrain('${doc.id}', '${attrName}')">Delete</button>
+          </div>
+        </div>
+      `;
+    });
+    listEl.innerHTML = html;
+  } catch (e) {
+    console.error('loadBuilder error:', e);
+    listEl.innerHTML = '<p class="hint">Could not load trains. Check console / Firestore rules.</p>';
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function editTrain(trainId) {
+  try {
+    const doc = await db.collection('trains').doc(trainId).get();
+    if (!doc.exists) {
+      await showAlert('Train not found.');
+      return;
+    }
+    const data = doc.data();
+    if (data.createdBy !== currentUser.uid) {
+      await showAlert('You can only edit your own trains.');
+      return;
+    }
+    showBuilderForm({ id: trainId, ...data });
+  } catch (e) {
+    console.error('editTrain error:', e);
+    await showAlert('Error loading train.');
+  }
+}
+
+async function deleteTrain(trainId, name) {
+  if (!(await showConfirm(`Delete train "${name}"?\n\nThis cannot be undone.`))) return;
+
+  try {
+    const doc = await db.collection('trains').doc(trainId).get();
+    if (!doc.exists) {
+      await showAlert('Train already deleted.');
+      loadBuilder();
+      return;
+    }
+    if (doc.data().createdBy !== currentUser.uid) {
+      await showAlert('You can only delete your own trains.');
+      return;
+    }
+    await db.collection('trains').doc(trainId).delete();
+    await showAlert('Train deleted.');
+    loadBuilder();
+  } catch (e) {
+    console.error('deleteTrain error:', e);
+    await showAlert('Error deleting train.');
+  }
+}
+
+/**
+ * Show the create / edit form.
+ * trainData = null → create new
+ * trainData = { id, name, bodyParts, exercises } → edit
+ */
+function showBuilderForm(trainData) {
+  const formEl = document.getElementById('builder-form');
+  const listEl = document.getElementById('builder-my-trains');
+  const createBtn = document.getElementById('builder-create-btn');
+  if (!formEl) return;
+
+  editingTrainId = trainData ? trainData.id : null;
+
+  // Hide list + create button while editing
+  if (listEl) listEl.style.display = 'none';
+  if (createBtn) createBtn.style.display = 'none';
+
+  const isEdit = !!trainData;
+  const nameVal = trainData ? escapeHtml(trainData.name) : '';
+  const selectedParts = new Set(trainData ? (trainData.bodyParts || []) : []);
+  const exercises = trainData ? (trainData.exercises || []) : [];
+
+  // Body part chips
+  let bodyHtml = '';
+  getBodyPartOptions().forEach(part => {
+    const checked = selectedParts.has(part) ? 'checked' : '';
+    const selClass = selectedParts.has(part) ? 'selected' : '';
+    bodyHtml += `
+      <label class="bodypart-chip ${selClass}">
+        <input type="checkbox" value="${part}" ${checked} onchange="this.parentElement.classList.toggle('selected', this.checked)">
+        ${part}
+      </label>
+    `;
+  });
+
+  // Exercise rows
+  let exHtml = '';
+  if (exercises.length === 0) {
+    // Start with 3 empty rows for convenience
+    for (let i = 0; i < MIN_EXERCISES_PER_TRAIN; i++) {
+      exHtml += buildExerciseRowHtml(i, null);
+    }
+  } else {
+    exercises.forEach((ex, i) => {
+      exHtml += buildExerciseRowHtml(i, ex);
+    });
+  }
+
+  formEl.innerHTML = `
+    <h3 style="color:#ffff00;margin-top:0;">${isEdit ? 'Edit Train' : 'New Train'}</h3>
+    <div class="builder-field">
+      <label for="train-name">Train name</label>
+      <input type="text" id="train-name" maxlength="40" placeholder="e.g. Push Strength" value="${nameVal}">
+    </div>
+    <div class="builder-field">
+      <label>Body parts focus (tags)</label>
+      <div class="bodypart-grid" id="train-bodyparts">${bodyHtml}</div>
+    </div>
+    <div class="builder-field">
+      <label>Exercises (min ${MIN_EXERCISES_PER_TRAIN}, max ${MAX_EXERCISES_PER_TRAIN}) — order matters</label>
+      <div id="train-exercises-list">${exHtml}</div>
+      <button type="button" class="btn-small" id="add-exercise-btn" onclick="addExerciseRow()">+ Add Exercise</button>
+    </div>
+    <div style="text-align:center;margin-top:16px;">
+      <button type="button" class="btn-secondary btn-small" onclick="cancelBuilderForm()">Cancel</button>
+      <button type="button" id="save-train-btn" onclick="saveTrain()">${isEdit ? 'Save Changes' : 'Save Train'}</button>
+    </div>
+  `;
+  formEl.style.display = 'block';
+}
+
+function buildExerciseRowHtml(index, data) {
+  const exerciseNames = getExerciseNames();
+  let options = '<option value="">— select exercise —</option>';
+  exerciseNames.forEach(name => {
+    const sel = data && data.exercise === name ? 'selected' : '';
+    options += `<option value="${escapeHtml(name)}" ${sel}>${escapeHtml(name)}</option>`;
+  });
+  const setsVal = data ? (data.sets || 3) : 3;
+  const repsVal = data ? (data.suggestedReps || 10) : 10;
+
+  return `
+    <div class="exercise-row" data-index="${index}">
+      <div class="exercise-row-header">
+        <span>Exercise #${index + 1}</span>
+        <button type="button" class="btn-small btn-danger" onclick="removeExerciseRow(this)">Remove</button>
+      </div>
+      <div class="row-inputs">
+        <select class="ex-name">${options}</select>
+        <label style="font-size:13px;color:#88ff88;">Sets</label>
+        <input type="number" class="ex-sets" min="1" max="20" value="${setsVal}" style="width:70px;">
+        <label style="font-size:13px;color:#88ff88;">Suggested reps</label>
+        <input type="number" class="ex-reps" min="1" max="100" value="${repsVal}" style="width:70px;">
+      </div>
+    </div>
+  `;
+}
+
+function addExerciseRow() {
+  const list = document.getElementById('train-exercises-list');
+  if (!list) return;
+  const rows = list.querySelectorAll('.exercise-row');
+  if (rows.length >= MAX_EXERCISES_PER_TRAIN) {
+    showAlert(`Maximum ${MAX_EXERCISES_PER_TRAIN} exercises per train.`);
+    return;
+  }
+  const idx = rows.length;
+  list.insertAdjacentHTML('beforeend', buildExerciseRowHtml(idx, null));
+  // Re-number headers
+  renumberExerciseRows();
+}
+
+function removeExerciseRow(btn) {
+  const row = btn.closest('.exercise-row');
+  if (!row) return;
+  const list = document.getElementById('train-exercises-list');
+  const rows = list ? list.querySelectorAll('.exercise-row') : [];
+  if (rows.length <= MIN_EXERCISES_PER_TRAIN) {
+    showAlert(`Minimum ${MIN_EXERCISES_PER_TRAIN} exercises required.`);
+    return;
+  }
+  row.remove();
+  renumberExerciseRows();
+}
+
+function renumberExerciseRows() {
+  const list = document.getElementById('train-exercises-list');
+  if (!list) return;
+  list.querySelectorAll('.exercise-row').forEach((row, i) => {
+    row.dataset.index = i;
+    const header = row.querySelector('.exercise-row-header span');
+    if (header) header.textContent = `Exercise #${i + 1}`;
+  });
+}
+
+function cancelBuilderForm() {
+  const formEl = document.getElementById('builder-form');
+  const listEl = document.getElementById('builder-my-trains');
+  if (formEl) formEl.style.display = 'none';
+  if (listEl) listEl.style.display = 'block';
+  editingTrainId = null;
+  loadBuilder(); // restores create button visibility
+}
+
+async function saveTrain() {
+  if (!currentUser) return;
+
+  const nameInput = document.getElementById('train-name');
+  const name = nameInput ? nameInput.value.trim() : '';
+  if (!name) {
+    await showAlert('Please enter a train name.');
+    return;
+  }
+  if (name.length > 40) {
+    await showAlert('Name is too long (max 40 characters).');
+    return;
+  }
+
+  // Body parts
+  const bodyParts = [];
+  document.querySelectorAll('#train-bodyparts input[type="checkbox"]:checked').forEach(cb => {
+    bodyParts.push(cb.value);
+  });
+
+  // Exercises
+  const exerciseRows = document.querySelectorAll('#train-exercises-list .exercise-row');
+  if (exerciseRows.length < MIN_EXERCISES_PER_TRAIN) {
+    await showAlert(`You need at least ${MIN_EXERCISES_PER_TRAIN} exercises.`);
+    return;
+  }
+  if (exerciseRows.length > MAX_EXERCISES_PER_TRAIN) {
+    await showAlert(`Maximum ${MAX_EXERCISES_PER_TRAIN} exercises.`);
+    return;
+  }
+
+  const exercises = [];
+  const usedNames = new Set();
+  for (const row of exerciseRows) {
+    const sel = row.querySelector('.ex-name');
+    const setsInp = row.querySelector('.ex-sets');
+    const repsInp = row.querySelector('.ex-reps');
+    const exercise = sel ? sel.value : '';
+    const sets = setsInp ? parseInt(setsInp.value, 10) : 0;
+    const suggestedReps = repsInp ? parseInt(repsInp.value, 10) : 0;
+
+    if (!exercise) {
+      await showAlert('Please select an exercise for every row.');
+      return;
+    }
+    if (isNaN(sets) || sets < 1) {
+      await showAlert(`Invalid sets for "${exercise}".`);
+      return;
+    }
+    if (isNaN(suggestedReps) || suggestedReps < 1) {
+      await showAlert(`Invalid suggested reps for "${exercise}".`);
+      return;
+    }
+    // Allow same exercise multiple times? Yes – different set schemes possible.
+    exercises.push({ exercise, sets, suggestedReps });
+  }
+
+  try {
+    // Check max trains when creating
+    if (!editingTrainId) {
+      const mySnap = await db.collection('trains')
+        .where('createdBy', '==', currentUser.uid)
+        .get();
+      if (mySnap.size >= MAX_TRAINS_PER_PLAYER) {
+        await showAlert(`You already have ${MAX_TRAINS_PER_PLAYER} trains. Delete one first.`);
+        return;
+      }
+    }
+
+    // Unique name per player (case-insensitive)
+    const nameLower = name.toLowerCase();
+    const nameCheck = await db.collection('trains')
+      .where('createdBy', '==', currentUser.uid)
+      .get();
+    let duplicate = false;
+    nameCheck.forEach(doc => {
+      if (doc.id === editingTrainId) return;
+      if ((doc.data().name || '').toLowerCase() === nameLower) duplicate = true;
+    });
+    if (duplicate) {
+      await showAlert('You already have a train with this name. Choose a different name.');
+      return;
+    }
+
+    const nickname = await getCurrentNickname();
+    const payload = {
+      name,
+      bodyParts,
+      exercises,
+      createdBy: currentUser.uid,
+      createdByNickname: nickname,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (editingTrainId) {
+      await db.collection('trains').doc(editingTrainId).update(payload);
+      await showAlert('Train updated!');
+    } else {
+      payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('trains').add(payload);
+      await showAlert('Train created! It is now available for every player.');
+    }
+
+    cancelBuilderForm();
+  } catch (e) {
+    console.error('saveTrain error:', e);
+    await showAlert('Error saving train: ' + e.message);
+  }
+}
+
+// ─── TRAINS TAB (use a train) ──────────────────────────────
+
+async function loadTrainsList() {
+  const listEl = document.getElementById('trains-list');
+  const sessionEl = document.getElementById('trains-session');
+  if (!listEl) return;
+
+  // Reset session view
+  if (sessionEl) {
+    sessionEl.style.display = 'none';
+    sessionEl.innerHTML = '';
+  }
+  currentTrainSession = null;
+  listEl.style.display = 'block';
+  listEl.innerHTML = '<p class="hint">Loading trains…</p>';
+
+  try {
+    // Prefer ordered query; fall back to unordered if index missing
+    let snap;
+    try {
+      snap = await db.collection('trains').orderBy('createdAt', 'desc').limit(50).get();
+    } catch (orderErr) {
+      console.warn('orderBy createdAt failed, falling back:', orderErr);
+      snap = await db.collection('trains').limit(50).get();
+    }
+
+    if (snap.empty) {
+      listEl.innerHTML = '<p class="hint">No trains created yet. Go to the Builder tab and make one!</p>';
+      return;
+    }
+
+    // Client-side sort as safety
+    const docs = snap.docs.slice().sort((a, b) => {
+      const ta = a.data().createdAt?.toMillis?.() || 0;
+      const tb = b.data().createdAt?.toMillis?.() || 0;
+      return tb - ta;
+    });
+
+    let html = '';
+    docs.forEach(doc => {
+      const t = doc.data();
+      const bodyTags = (t.bodyParts || []).map(b => `<span>${b}</span>`).join('');
+      const exCount = (t.exercises || []).length;
+      html += `
+        <div class="train-card">
+          <div class="train-card-header">
+            <div class="train-name">${escapeHtml(t.name)}</div>
+          </div>
+          <div class="train-meta">by ${escapeHtml(t.createdByNickname || 'Unknown')} · ${exCount} exercises</div>
+          <div class="train-bodyparts">${bodyTags || '—'}</div>
+          <div class="train-actions">
+            <button type="button" class="btn-small" onclick="startTrainSession('${doc.id}')">Use this train</button>
+          </div>
+        </div>
+      `;
+    });
+    listEl.innerHTML = html;
+  } catch (e) {
+    console.error('loadTrainsList error:', e);
+    listEl.innerHTML = '<p class="hint">Could not load trains. Check console / Firestore rules.</p>';
+  }
+}
+
+async function startTrainSession(trainId) {
+  try {
+    const doc = await db.collection('trains').doc(trainId).get();
+    if (!doc.exists) {
+      await showAlert('This train no longer exists.');
+      loadTrainsList();
+      return;
+    }
+    const train = { id: doc.id, ...doc.data() };
+    if (!train.exercises || train.exercises.length < MIN_EXERCISES_PER_TRAIN) {
+      await showAlert('This train is incomplete.');
+      return;
+    }
+
+    currentTrainSession = train;
+
+    const listEl = document.getElementById('trains-list');
+    const sessionEl = document.getElementById('trains-session');
+    if (listEl) listEl.style.display = 'none';
+    if (!sessionEl) return;
+
+    let html = `
+      <div class="stats" style="text-align:center;">
+        <strong>${escapeHtml(train.name)}</strong><br>
+        <span style="font-size:13px;color:#88ff88;">by ${escapeHtml(train.createdByNickname || 'Unknown')}</span>
+      </div>
+      <p class="hint" style="text-align:center;">Fill weight (kg) and actual reps for every set, then confirm.</p>
+    `;
+
+    train.exercises.forEach((ex, exIdx) => {
+      html += `
+        <div class="session-exercise" data-ex-index="${exIdx}">
+          <div class="session-exercise-title">${exIdx + 1}. ${escapeHtml(ex.exercise)}</div>
+      `;
+      for (let s = 1; s <= ex.sets; s++) {
+        html += `
+          <div class="session-set-row" data-set="${s}">
+            <span class="session-set-label">Set ${s}</span>
+            <input type="number" class="set-weight" placeholder="kg" step="0.5" min="0" data-ex="${exIdx}" data-set="${s}">
+            <input type="number" class="set-reps" placeholder="reps" min="1" data-ex="${exIdx}" data-set="${s}">
+            <span class="session-suggested">suggested ${ex.suggestedReps} reps</span>
+          </div>
+        `;
+      }
+      html += `</div>`;
+    });
+
+    html += `
+      <div class="session-total" id="session-preview-xp"></div>
+      <div class="session-actions">
+        <button type="button" class="btn-secondary" onclick="cancelTrainSession()">Cancel</button>
+        <button type="button" id="confirm-train-btn" onclick="confirmTrainSession()">CONFIRM TRAIN 💪</button>
+      </div>
+    `;
+
+    sessionEl.innerHTML = html;
+    sessionEl.style.display = 'block';
+
+    // Live XP preview (optional nicety)
+    sessionEl.querySelectorAll('.set-weight, .set-reps').forEach(inp => {
+      inp.addEventListener('input', updateSessionXpPreview);
+    });
+  } catch (e) {
+    console.error('startTrainSession error:', e);
+    await showAlert('Error starting train.');
+  }
+}
+
+function updateSessionXpPreview() {
+  if (!currentTrainSession) return;
+  const preview = document.getElementById('session-preview-xp');
+  if (!preview) return;
+
+  let total = 0;
+  currentTrainSession.exercises.forEach((ex, exIdx) => {
+    for (let s = 1; s <= ex.sets; s++) {
+      const wEl = document.querySelector(`.set-weight[data-ex="${exIdx}"][data-set="${s}"]`);
+      const rEl = document.querySelector(`.set-reps[data-ex="${exIdx}"][data-set="${s}"]`);
+      const weight = wEl ? parseFloat(wEl.value) : NaN;
+      const reps = rEl ? parseInt(rEl.value, 10) : NaN;
+      if (!isNaN(weight) && !isNaN(reps) && reps >= 1) {
+        const factor = exerciseFactors[ex.exercise] ?? 0.1;
+        total += Math.floor(reps * Math.pow(weight * factor, 2));
+      }
+    }
+  });
+  preview.textContent = total > 0 ? `Estimated XP if confirmed: +${total}` : '';
+}
+
+function cancelTrainSession() {
+  currentTrainSession = null;
+  const sessionEl = document.getElementById('trains-session');
+  if (sessionEl) {
+    sessionEl.style.display = 'none';
+    sessionEl.innerHTML = '';
+  }
+  loadTrainsList();
+}
+
+async function confirmTrainSession() {
+  if (!currentUser || !currentTrainSession) return;
+
+  const train = currentTrainSession;
+  const setsToLog = []; // { exercise, weight, reps, xpGain, muscleGains }
+
+  // Collect & validate every set
+  for (let exIdx = 0; exIdx < train.exercises.length; exIdx++) {
+    const ex = train.exercises[exIdx];
+    for (let s = 1; s <= ex.sets; s++) {
+      const wEl = document.querySelector(`.set-weight[data-ex="${exIdx}"][data-set="${s}"]`);
+      const rEl = document.querySelector(`.set-reps[data-ex="${exIdx}"][data-set="${s}"]`);
+      const weight = wEl ? parseFloat(wEl.value) : NaN;
+      const reps = rEl ? parseInt(rEl.value, 10) : NaN;
+
+      if (isNaN(weight) || weight < 0 || isNaN(reps) || reps < 1) {
+        await showAlert(`Please fill valid weight and reps for:\n${ex.exercise} — Set ${s}`);
+        return;
+      }
+
+      const factor = exerciseFactors[ex.exercise] ?? 0.1;
+      const xpGain = Math.floor(reps * Math.pow(weight * factor, 2));
+      const muscleMap = exerciseMuscles[ex.exercise] || {};
+      const muscleGains = {};
+      for (const [muscle, pct] of Object.entries(muscleMap)) {
+        muscleGains[muscle] = Math.floor(xpGain * (pct / 100));
+      }
+
+      setsToLog.push({
+        exercise: ex.exercise,
+        weight,
+        reps,
+        xpGain,
+        muscleGains
+      });
+    }
+  }
+
+  if (setsToLog.length === 0) {
+    await showAlert('No sets to log.');
+    return;
+  }
+
+  const totalXP = setsToLog.reduce((sum, s) => sum + s.xpGain, 0);
+
+  // Confirm dialog
+  const confirmMsg =
+    `Confirm this train?\n\n` +
+    `${train.name}\n` +
+    `${setsToLog.length} sets\n` +
+    `Total +${totalXP} XP\n\n` +
+    `Click OK to save all sets, or Cancel to go back.`;
+  if (!(await showConfirm(confirmMsg))) return;
+
+  // Disable button to prevent double-submit
+  const btn = document.getElementById('confirm-train-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+  }
+
+  try {
+    const userRef = db.collection('users').doc(currentUser.uid);
+    const doc = await userRef.get();
+    if (!doc.exists) {
+      await showAlert('User data not found.');
+      return;
+    }
+    const data = doc.data();
+
+    // Aggregate XP & muscles
+    let totalXpGain = 0;
+    const totalMuscleGains = {};
+    setsToLog.forEach(s => {
+      totalXpGain += s.xpGain;
+      for (const [m, g] of Object.entries(s.muscleGains)) {
+        totalMuscleGains[m] = (totalMuscleGains[m] || 0) + g;
+      }
+    });
+
+    let newXP = (data.xp || 0) + totalXpGain;
+    let newLevel = data.level || 1;
+    while (newXP >= calculateCumulativeXP(newLevel) + newLevel * 1000) {
+      newLevel++;
+    }
+
+    const strengthGain = Math.floor(totalXpGain / 30);
+    const newStrength = Math.floor((data.strength || 10) + strengthGain);
+
+    // Lifetime muscles
+    const updatedMuscles = { ...(data.muscles || emptyMuscles()) };
+    for (const [m, g] of Object.entries(totalMuscleGains)) {
+      updatedMuscles[m] = (updatedMuscles[m] || 0) + g;
+    }
+
+    // Daily / weekly
+    const today = getTodayString();
+    const weekStart = getWeekStartString();
+
+    let dailyXP = data.dailyXP || 0;
+    if (data.lastDailyReset !== today) dailyXP = 0;
+    dailyXP += totalXpGain;
+
+    let weeklyXP = data.weeklyXP || 0;
+    let currentWeeklyMuscles = data.weeklyMuscles || emptyMuscles();
+    if (data.lastWeeklyReset !== weekStart) {
+      weeklyXP = 0;
+      currentWeeklyMuscles = emptyMuscles();
+    }
+    weeklyXP += totalXpGain;
+
+    const updatedWeeklyMuscles = { ...currentWeeklyMuscles };
+    for (const [m, g] of Object.entries(totalMuscleGains)) {
+      updatedWeeklyMuscles[m] = (updatedWeeklyMuscles[m] || 0) + g;
+    }
+
+    await userRef.update({
+      xp: newXP,
+      level: newLevel,
+      strength: newStrength,
+      dailyXP,
+      lastDailyReset: today,
+      weeklyXP,
+      lastWeeklyReset: weekStart,
+      muscles: updatedMuscles,
+      weeklyMuscles: updatedWeeklyMuscles
+    });
+
+    // Save every set to history (with trainName)
+    const setsRef = userRef.collection('sets');
+    const batch = db.batch();
+    const newSetRefs = [];
+
+    setsToLog.forEach(s => {
+      const ref = setsRef.doc(); // auto-id
+      newSetRefs.push(ref);
+      batch.set(ref, {
+        exercise: s.exercise,
+        weight: s.weight,
+        reps: s.reps,
+        xp: s.xpGain,
+        trainName: train.name,
+        trainId: train.id,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    await batch.commit();
+
+    // Keep only newest 30 sets
+    const allSetsSnap = await setsRef.orderBy('createdAt', 'asc').get();
+    if (allSetsSnap.size > 30) {
+      const excess = allSetsSnap.size - 30;
+      const delBatch = db.batch();
+      allSetsSnap.docs.slice(0, excess).forEach(d => delBatch.delete(d.ref));
+      await delBatch.commit();
+    }
+
+    // Success message
+    let muscleMsg = Object.entries(totalMuscleGains)
+      .filter(([, g]) => g > 0)
+      .map(([m, g]) => `${m} +${g}`)
+      .join(', ');
+
+    await showAlert(
+      `✅ Train completed!\n\n` +
+      `${train.name}\n` +
+      `+${totalXpGain} XP\n` +
+      (muscleMsg ? `(${muscleMsg})` : '')
+    );
+
+    await loadUserData(currentUser.uid);
+    loadLeaderboards();
+
+    // Clear session and go back to list
+    currentTrainSession = null;
+    cancelTrainSession();
+
+  } catch (e) {
+    console.error('confirmTrainSession error:', e);
+    await showAlert('Error saving train: ' + e.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'CONFIRM TRAIN 💪';
+    }
+  }
+}
+
