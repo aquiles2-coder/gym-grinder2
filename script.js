@@ -613,10 +613,12 @@ async function loadUserData(uid) {
     const doc = await db.collection('users').doc(uid).get();
     if (doc.exists) {
       const data = doc.data();
-      // Update profile button in header with player name
+      // Update profile button: "👤 Alex · Lv 4"
       const profileBtn = document.getElementById('profile-btn');
       if (profileBtn) {
-        profileBtn.textContent = `👤 ${data.nickname || 'Profile'}`;
+        const nick = data.nickname || 'Profile';
+        const lvl = data.level || 1;
+        profileBtn.textContent = `👤 ${nick} · Lv ${lvl}`;
       }
 
       // Reset dailyXP / weeklyXP / weeklyMuscles if the period has changed
