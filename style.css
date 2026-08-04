@@ -161,15 +161,16 @@ progress {
 }
 
 .header-box.active {
-  background: #ff0000;
-  color: white;
-  border-color: #ff0000;
-  box-shadow: 0 0 12px rgba(255, 0, 0, 0.5);
+  background: #ffcc00;
+  color: #111;
+  border-color: #ffcc00;
+  box-shadow: 0 0 12px rgba(255, 200, 0, 0.55);
+  font-weight: bold;
 }
 
 .header-box.active:hover {
   background: #ffff00;
-  color: black;
+  color: #111;
   border-color: #ffff00;
 }
 
@@ -224,15 +225,16 @@ progress {
 }
 
 .menu-box.active {
-  background: #ff0000;
-  color: white;
-  border-color: #ff0000;
-  box-shadow: 0 0 12px rgba(255, 0, 0, 0.5);
+  background: #ffcc00;
+  color: #111;
+  border-color: #ffcc00;
+  box-shadow: 0 0 12px rgba(255, 200, 0, 0.55);
+  font-weight: bold;
 }
 
 .menu-box.active:hover {
   background: #ffff00;
-  color: black;
+  color: #111;
   border-color: #ffff00;
 }
 
@@ -925,15 +927,16 @@ select:focus, input[type="number"]:focus {
 }
 
 .body-filter-chip.active {
-  background: #ff0000 !important;
-  color: white !important;
-  border-color: #ff0000 !important;
-  box-shadow: 0 0 10px rgba(255, 0, 0, 0.4);
+  background: #ffcc00 !important;
+  color: #111 !important;
+  border-color: #ffcc00 !important;
+  box-shadow: 0 0 10px rgba(255, 200, 0, 0.45);
+  font-weight: bold;
 }
 
 .body-filter-chip.active:hover {
   background: #ffff00 !important;
-  color: black !important;
+  color: #111 !important;
   border-color: #ffff00 !important;
 }
 
