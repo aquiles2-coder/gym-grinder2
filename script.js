@@ -9,6 +9,8 @@ let editingTrainId = null;          // null = creating new, string = editing exi
 let currentTrainSession = null;     // the train object currently being performed
 let allTrainsCache = [];            // cached trains for body-part filtering
 let selectedBodyFilter = null;      // currently selected body part on Trains tab
+let copyTrainsCache = [];           // all trains available for "Copy existing train"
+let selectedCopyTrainId = null;     // train id selected in the copy searchable select
 const MAX_TRAINS_PER_PLAYER = 6;
 const MIN_EXERCISES_PER_TRAIN = 3;
 const MAX_EXERCISES_PER_TRAIN = 10;
@@ -236,7 +238,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (user) {
       currentUser = user;
       hide('auth-section');
-      show('logout-btn', 'inline-block');
 
       try {
         const doc = await db.collection('users').doc(user.uid).get();
@@ -251,20 +252,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = doc.data();
 
         if (data.approved === true) {
-          // Approved → show the game
+          // Approved → show the game + header bar
           hide('pending-section');
           show('main-game', 'block');
+          show('header-bar', 'flex');
           await loadUserData(user.uid);
           setupWorkoutListeners();
           loadLeaderboards();
         } else {
           // Not yet approved → show waiting screen
           hide('main-game');
+          hide('header-bar');
           show('pending-section', 'block');
         }
       } catch (err) {
         console.error('Error checking approval status:', err);
         hide('main-game');
+        hide('header-bar');
         show('pending-section', 'block');
       }
     } else {
@@ -272,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
       show('auth-section', 'block');
       hide('main-game');
       hide('pending-section');
-      hide('logout-btn');
+      hide('header-bar');
     }
   });
 });
@@ -609,14 +613,10 @@ async function loadUserData(uid) {
     const doc = await db.collection('users').doc(uid).get();
     if (doc.exists) {
       const data = doc.data();
-      const nextLevelXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 1000;
-      const statsEl = document.getElementById('stats');
-      const userInfoEl = document.getElementById('user-info');
-      if (statsEl) {
-        statsEl.innerHTML = `Level: ${data.level} | XP: ${data.xp || 0}/${nextLevelXP} | Strength: ${data.strength || 10}`;
-      }
-      if (userInfoEl) {
-        userInfoEl.innerHTML = `Welcome, ${data.nickname}`;
+      // Update profile button in header with player name
+      const profileBtn = document.getElementById('profile-btn');
+      if (profileBtn) {
+        profileBtn.textContent = `👤 ${data.nickname || 'Profile'}`;
       }
 
       // Reset dailyXP / weeklyXP / weeklyMuscles if the period has changed
@@ -842,7 +842,7 @@ async function loadHistory(uid) {
       html += `
         <div class="set-card">
           ${trainBadge}
-          <div class="set-exercise">${s.exercise || '—'}${isCardio ? ' 🏃' : ''}</div>
+          <div class="set-exercise">${s.exercise || '—'}${isCardio ? ' 🏃' : ' 🏋️'}</div>
           <div class="set-details">
             ${details}
           </div>
@@ -1439,6 +1439,17 @@ function isCardioExercise(name) {
   return Object.prototype.hasOwnProperty.call(cardioCoefficients, name);
 }
 
+/** Icon for an exercise (placed on the right of the name) */
+function exerciseIcon(name) {
+  return isCardioExercise(name) ? '🏃' : '🏋️';
+}
+
+/** Display label: "Name 🏋️" or "Name 🏃" */
+function exerciseLabel(name) {
+  if (!name) return '';
+  return `${name} ${exerciseIcon(name)}`;
+}
+
 /** Fetch current user's nickname (cached on user doc) */
 async function getCurrentNickname() {
   if (!currentUser) return 'Unknown';
@@ -1463,16 +1474,18 @@ async function loadBuilder() {
   // Hide form when switching back to list
   if (formEl) formEl.style.display = 'none';
   editingTrainId = null;
+  selectedCopyTrainId = null;
 
   listEl.innerHTML = '<p class="hint">Loading your trains…</p>';
 
   try {
-    // No orderBy here to avoid composite-index requirement; sort client-side
-    const snap = await db.collection('trains')
-      .where('createdBy', '==', currentUser.uid)
-      .get();
+    // Load my trains + all trains (for copy) in parallel
+    const [mySnap, allSnap] = await Promise.all([
+      db.collection('trains').where('createdBy', '==', currentUser.uid).get(),
+      db.collection('trains').limit(100).get()
+    ]);
 
-    const count = snap.size;
+    const count = mySnap.size;
     if (statusEl) {
       statusEl.innerHTML = `Your trains: <strong>${count} / ${MAX_TRAINS_PER_PLAYER}</strong>`;
     }
@@ -1481,39 +1494,76 @@ async function loadBuilder() {
       createBtn.onclick = () => showBuilderForm(null);
     }
 
-    if (snap.empty) {
-      listEl.innerHTML = '<p class="hint">You have no trains yet. Create one!</p>';
-      return;
-    }
+    // Cache all trains for the copy searchable select
+    copyTrainsCache = allSnap.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => {
+        const nameA = (a.name || '').toLowerCase();
+        const nameB = (b.name || '').toLowerCase();
+        if (nameA !== nameB) return nameA.localeCompare(nameB);
+        return (a.createdByNickname || '').localeCompare(b.createdByNickname || '');
+      });
 
-    // Sort newest first
-    const docs = snap.docs.slice().sort((a, b) => {
+    // Sort my trains newest first
+    const docs = mySnap.docs.slice().sort((a, b) => {
       const ta = a.data().createdAt?.toMillis?.() || 0;
       const tb = b.data().createdAt?.toMillis?.() || 0;
       return tb - ta;
     });
 
     let html = '';
-    docs.forEach(doc => {
-      const t = doc.data();
-      const bodyTags = (t.bodyParts || []).map(b => `<span>${b}</span>`).join('');
-      // Escape for HTML attribute (single quotes)
-      const attrName = String(t.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      html += `
-        <div class="train-card" data-id="${doc.id}">
-          <div class="train-card-header">
-            <div class="train-name">${escapeHtml(t.name)}</div>
-          </div>
-          <div class="train-meta">${(t.exercises || []).length} exercises</div>
-          <div class="train-bodyparts">${bodyTags || '—'}</div>
-          <div class="train-actions">
-            <button type="button" class="btn-small" onclick="editTrain('${doc.id}')">Edit</button>
-            <button type="button" class="btn-small btn-danger" onclick="deleteTrain('${doc.id}', '${attrName}')">Delete</button>
-          </div>
+
+    // ── Copy existing train section ──
+    html += `
+      <div class="copy-train-section">
+        <h3 style="color:#00ff88;margin:0 0 6px;font-size:16px;">📋 Copy an existing train</h3>
+        <p class="hint" style="margin-bottom:10px;">Search by train name or player, then copy it. The copy is yours — edit freely.</p>
+        <div class="searchable-select" id="copy-train-search">
+          <input type="text" class="searchable-input" id="copy-train-input"
+            placeholder="Type train name or player…"
+            autocomplete="off"
+            onfocus="openSearchableDropdown(this)"
+            oninput="filterSearchableDropdown(this)"
+            onblur="delayedCloseSearchable(this)">
+          <div class="searchable-dropdown" id="copy-train-dropdown" style="display:none;"></div>
         </div>
-      `;
-    });
+        <button type="button" class="btn-small" id="copy-train-btn" style="margin-top:10px;"
+          onclick="copySelectedTrain()" ${count >= MAX_TRAINS_PER_PLAYER ? 'disabled' : ''}>
+          Copy to my trains
+        </button>
+        ${count >= MAX_TRAINS_PER_PLAYER
+          ? '<p class="hint" style="margin-top:6px;">You already have the maximum of 6 trains.</p>'
+          : ''}
+      </div>
+    `;
+
+    if (docs.length === 0) {
+      html += '<p class="hint" style="margin-top:18px;">You have no trains yet. Create one or copy an existing train above!</p>';
+    } else {
+      html += '<p class="hint" style="margin-top:18px;margin-bottom:10px;">Your trains:</p>';
+      docs.forEach(doc => {
+        const t = doc.data();
+        const bodyTags = (t.bodyParts || []).map(b => `<span>${escapeHtml(b)}</span>`).join('');
+        const attrName = String(t.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        html += `
+          <div class="train-card" data-id="${doc.id}">
+            <div class="train-card-header">
+              <div class="train-name">${escapeHtml(t.name)}</div>
+            </div>
+            <div class="train-meta">${(t.exercises || []).length} exercises</div>
+            <div class="train-bodyparts">${bodyTags || '—'}</div>
+            <div class="train-actions">
+              <button type="button" class="btn-small" onclick="editTrain('${doc.id}')">Edit</button>
+              <button type="button" class="btn-small btn-danger" onclick="deleteTrain('${doc.id}', '${attrName}')">Delete</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
     listEl.innerHTML = html;
+    // Populate the copy dropdown options
+    renderCopyTrainDropdown('');
   } catch (e) {
     console.error('loadBuilder error:', e);
     listEl.innerHTML = '<p class="hint">Could not load trains. Check console / Firestore rules.</p>';
@@ -1594,13 +1644,15 @@ function showBuilderForm(trainData) {
   const createBtn = document.getElementById('builder-create-btn');
   if (!formEl) return;
 
-  editingTrainId = trainData ? trainData.id : null;
+  // Only set editing id when we truly have an existing train id (not a copy)
+  editingTrainId = (trainData && trainData.id) ? trainData.id : null;
 
   // Hide list + create button while editing
   if (listEl) listEl.style.display = 'none';
   if (createBtn) createBtn.style.display = 'none';
 
-  const isEdit = !!trainData;
+  const isEdit = !!editingTrainId;
+  const isCopy = !!(trainData && !trainData.id);
   const nameVal = trainData ? escapeHtml(trainData.name) : '';
   const selectedParts = new Set(trainData ? (trainData.bodyParts || []) : []);
   const exercises = trainData ? (trainData.exercises || []) : [];
@@ -1631,8 +1683,9 @@ function showBuilderForm(trainData) {
     });
   }
 
+  const formTitle = isEdit ? 'Edit Train' : (isCopy ? 'Copy Train (edit then save)' : 'New Train');
   formEl.innerHTML = `
-    <h3 style="color:#ffff00;margin-top:0;">${isEdit ? 'Edit Train' : 'New Train'}</h3>
+    <h3 style="color:#ffff00;margin-top:0;">${formTitle}</h3>
     <div class="builder-field">
       <label for="train-name">Train name</label>
       <input type="text" id="train-name" maxlength="40" placeholder="e.g. Push Strength" value="${nameVal}">
@@ -1655,14 +1708,9 @@ function showBuilderForm(trainData) {
 }
 
 function buildExerciseRowHtml(index, data) {
-  const exerciseNames = getExerciseNames();
   const isCardio = data && (data.type === 'cardio' || isCardioExercise(data.exercise));
-  let options = '<option value="">— select exercise —</option>';
-  exerciseNames.forEach(name => {
-    const sel = data && data.exercise === name ? 'selected' : '';
-    const prefix = isCardioExercise(name) ? '🏃 ' : '';
-    options += `<option value="${escapeHtml(name)}" ${sel}>${prefix}${escapeHtml(name)}</option>`;
-  });
+  const selectedName = data && data.exercise ? data.exercise : '';
+  const displayVal = selectedName ? escapeHtml(exerciseLabel(selectedName)) : '';
 
   const setsVal = data && !isCardio ? (data.sets || 3) : 3;
   const repsVal = data && !isCardio ? (data.suggestedReps || 10) : 10;
@@ -1671,18 +1719,20 @@ function buildExerciseRowHtml(index, data) {
 
   // Type-specific inputs
   let typeInputs;
-  if (isCardio) {
+  if (selectedName && isCardio) {
     typeInputs = `
       <label style="font-size:13px;color:#88ff88;">Suggested km</label>
       <input type="number" class="ex-km" min="0.1" step="0.1" max="100" value="${kmVal}" style="width:90px;">
     `;
-  } else {
+  } else if (selectedName) {
     typeInputs = `
       <label style="font-size:13px;color:#88ff88;">Sets</label>
       <input type="number" class="ex-sets" min="1" max="20" value="${setsVal}" style="width:70px;">
       <label style="font-size:13px;color:#88ff88;">Suggested reps</label>
       <input type="number" class="ex-reps" min="1" max="100" value="${repsVal}" style="width:70px;">
     `;
+  } else {
+    typeInputs = '';
   }
 
   return `
@@ -1692,7 +1742,17 @@ function buildExerciseRowHtml(index, data) {
         <button type="button" class="btn-small btn-danger" onclick="removeExerciseRow(this)">Remove</button>
       </div>
       <div class="row-inputs">
-        <select class="ex-name" onchange="onExerciseTypeChange(this)">${options}</select>
+        <div class="searchable-select ex-searchable">
+          <input type="text" class="searchable-input ex-name-input"
+            placeholder="Type to search or scroll…"
+            autocomplete="off"
+            value="${displayVal}"
+            onfocus="openSearchableDropdown(this)"
+            oninput="filterSearchableDropdown(this)"
+            onblur="delayedCloseSearchable(this)">
+          <input type="hidden" class="ex-name" value="${escapeHtml(selectedName)}">
+          <div class="searchable-dropdown" style="display:none;"></div>
+        </div>
         <span class="ex-type-inputs">${typeInputs}</span>
       </div>
       <div class="ex-notes-row">
@@ -1704,13 +1764,11 @@ function buildExerciseRowHtml(index, data) {
 }
 
 /** When the player picks a different exercise, switch between strength / cardio inputs */
-function onExerciseTypeChange(selectEl) {
-  const row = selectEl.closest('.exercise-row');
+function onExerciseTypeChange(name, row) {
   if (!row) return;
   const container = row.querySelector('.ex-type-inputs');
   if (!container) return;
 
-  const name = selectEl.value;
   if (!name) {
     container.innerHTML = '';
     return;
@@ -1728,6 +1786,179 @@ function onExerciseTypeChange(selectEl) {
       <label style="font-size:13px;color:#88ff88;">Suggested reps</label>
       <input type="number" class="ex-reps" min="1" max="100" value="10" style="width:70px;">
     `;
+  }
+}
+
+// ─── Searchable select helpers ─────────────────────────────
+
+function openSearchableDropdown(input) {
+  const wrap = input.closest('.searchable-select');
+  if (!wrap) return;
+  const dropdown = wrap.querySelector('.searchable-dropdown');
+  if (!dropdown) return;
+
+  if (wrap.id === 'copy-train-search' || wrap.closest('#copy-train-search') || input.id === 'copy-train-input') {
+    renderCopyTrainDropdown(input.value);
+  } else {
+    renderExerciseDropdown(wrap, input.value);
+  }
+  dropdown.style.display = 'block';
+}
+
+function filterSearchableDropdown(input) {
+  const wrap = input.closest('.searchable-select');
+  if (!wrap) return;
+
+  // Clear the hidden value while typing (must re-select from list)
+  const hidden = wrap.querySelector('.ex-name');
+  if (hidden) hidden.value = '';
+  if (input.id === 'copy-train-input') selectedCopyTrainId = null;
+
+  openSearchableDropdown(input);
+}
+
+function delayedCloseSearchable(input) {
+  // Delay so click on a dropdown item still registers
+  setTimeout(() => {
+    const wrap = input.closest('.searchable-select');
+    if (!wrap) return;
+    const dropdown = wrap.querySelector('.searchable-dropdown');
+    if (dropdown) dropdown.style.display = 'none';
+  }, 180);
+}
+
+function renderExerciseDropdown(wrap, filterText) {
+  const dropdown = wrap.querySelector('.searchable-dropdown');
+  if (!dropdown) return;
+
+  const q = (filterText || '').toLowerCase().trim()
+    .replace(/[🏋️🏃]/g, '')
+    .trim();
+  const names = getExerciseNames();
+  const filtered = q
+    ? names.filter(n => n.toLowerCase().includes(q))
+    : names;
+
+  if (filtered.length === 0) {
+    dropdown.innerHTML = '<div class="searchable-empty">No exercises found</div>';
+    return;
+  }
+
+  let html = '';
+  filtered.forEach(name => {
+    const icon = exerciseIcon(name);
+    html += `
+      <div class="searchable-option" data-value="${escapeHtml(name)}"
+        onmousedown="event.preventDefault(); selectExerciseOption(this)">
+        <span class="opt-name">${escapeHtml(name)}</span>
+        <span class="opt-icon">${icon}</span>
+      </div>
+    `;
+  });
+  dropdown.innerHTML = html;
+}
+
+function selectExerciseOption(el) {
+  const wrap = el.closest('.searchable-select');
+  if (!wrap) return;
+  const name = el.dataset.value || '';
+  const input = wrap.querySelector('.ex-name-input');
+  const hidden = wrap.querySelector('.ex-name');
+  const dropdown = wrap.querySelector('.searchable-dropdown');
+
+  if (input) input.value = exerciseLabel(name);
+  if (hidden) hidden.value = name;
+  if (dropdown) dropdown.style.display = 'none';
+
+  const row = wrap.closest('.exercise-row');
+  onExerciseTypeChange(name, row);
+}
+
+function renderCopyTrainDropdown(filterText) {
+  const dropdown = document.getElementById('copy-train-dropdown');
+  if (!dropdown) return;
+
+  const q = (filterText || '').toLowerCase().trim();
+  const filtered = q
+    ? copyTrainsCache.filter(t => {
+        const name = (t.name || '').toLowerCase();
+        const nick = (t.createdByNickname || '').toLowerCase();
+        return name.includes(q) || nick.includes(q) || `${name} ${nick}`.includes(q);
+      })
+    : copyTrainsCache;
+
+  if (filtered.length === 0) {
+    dropdown.innerHTML = '<div class="searchable-empty">No trains found</div>';
+    return;
+  }
+
+  let html = '';
+  filtered.forEach(t => {
+    const label = `${t.name || 'Untitled'} · by ${t.createdByNickname || 'Unknown'}`;
+    html += `
+      <div class="searchable-option" data-id="${t.id}"
+        data-label="${escapeHtml(label)}"
+        onmousedown="event.preventDefault(); selectCopyTrainOption(this)">
+        <span class="opt-name">${escapeHtml(t.name || 'Untitled')}</span>
+        <span class="opt-meta">by ${escapeHtml(t.createdByNickname || 'Unknown')}</span>
+      </div>
+    `;
+  });
+  dropdown.innerHTML = html;
+}
+
+function selectCopyTrainOption(el) {
+  selectedCopyTrainId = el.dataset.id || null;
+  const input = document.getElementById('copy-train-input');
+  const dropdown = document.getElementById('copy-train-dropdown');
+  if (input) input.value = el.dataset.label || '';
+  if (dropdown) dropdown.style.display = 'none';
+}
+
+/**
+ * Copy the selected train into the builder form as a NEW independent train.
+ * Opens the create form pre-filled so the player can edit before saving.
+ */
+async function copySelectedTrain() {
+  if (!currentUser) return;
+  if (!selectedCopyTrainId) {
+    await showAlert('Please select a train to copy (type or pick from the list).');
+    return;
+  }
+
+  try {
+    // Enforce max trains
+    const mySnap = await db.collection('trains')
+      .where('createdBy', '==', currentUser.uid)
+      .get();
+    if (mySnap.size >= MAX_TRAINS_PER_PLAYER) {
+      await showAlert(`You already have ${MAX_TRAINS_PER_PLAYER} trains. Delete one first.`);
+      return;
+    }
+
+    const doc = await db.collection('trains').doc(selectedCopyTrainId).get();
+    if (!doc.exists) {
+      await showAlert('That train no longer exists.');
+      return;
+    }
+
+    const data = doc.data();
+    const exercises = (data.exercises || []).map(ex => ({ ...ex })); // shallow clone
+    const bodyParts = [...(data.bodyParts || [])];
+    const baseName = data.name || 'Train';
+    const copyName = baseName.length > 32 ? baseName.slice(0, 32) + '…' : baseName;
+    const newName = `${copyName} (copy)`;
+
+    // Open form as NEW train (no id) — independent from the original
+    showBuilderForm({
+      name: newName,
+      bodyParts,
+      exercises
+      // no id → treated as create
+    });
+  } catch (e) {
+    console.error('copySelectedTrain error:', e);
+    await showAlert('Error loading train to copy.');
   }
 }
 
@@ -1810,13 +2041,24 @@ async function saveTrain() {
 
   const exercises = [];
   for (const row of exerciseRows) {
-    const sel = row.querySelector('.ex-name');
-    const exercise = sel ? sel.value : '';
+    // Prefer hidden value (set when user picks from searchable list)
+    const hidden = row.querySelector('input.ex-name');
+    let exercise = hidden ? hidden.value.trim() : '';
+    // Fallback: try to match typed text against known exercise names
+    if (!exercise) {
+      const typed = (row.querySelector('.ex-name-input')?.value || '')
+        .replace(/[🏋️🏃]/g, '')
+        .trim();
+      if (typed) {
+        const match = getExerciseNames().find(n => n.toLowerCase() === typed.toLowerCase());
+        if (match) exercise = match;
+      }
+    }
     const notesInp = row.querySelector('.ex-notes');
     const notes = notesInp ? notesInp.value.trim() : '';
 
     if (!exercise) {
-      await showAlert('Please select an exercise for every row.');
+      await showAlert('Please select an exercise for every row (pick from the list).');
       return;
     }
     if (notes.length > 100) {
@@ -2071,13 +2313,13 @@ async function startTrainSession(trainId) {
 
     train.exercises.forEach((ex, exIdx) => {
       const isCardio = ex.type === 'cardio' || isCardioExercise(ex.exercise);
-      const icon = isCardio ? '🏃 ' : '';
+      const icon = isCardio ? ' 🏃' : ' 🏋️';
       const noteHtml = ex.notes
         ? `<div class="session-note">📝 ${escapeHtml(ex.notes)}</div>`
         : '';
       html += `
         <div class="session-exercise" data-ex-index="${exIdx}" data-type="${isCardio ? 'cardio' : 'strength'}">
-          <div class="session-exercise-title">${exIdx + 1}. ${icon}${escapeHtml(ex.exercise)}</div>
+          <div class="session-exercise-title">${exIdx + 1}. ${escapeHtml(ex.exercise)}${icon}</div>
           ${noteHtml}
       `;
 
