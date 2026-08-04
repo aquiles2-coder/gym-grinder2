@@ -354,8 +354,8 @@ const exerciseMuscles = {
   "Shoulder Press 2 arms":          { Shoulders: 70, Triceps: 20, Chest: 10 },
   "Squat bodyweight":               { Quads: 40, Glutes: 30, Hamstrings: 15, Core: 10, Calves: 5 },
   "Standing Calf Raises bodyweight":{ Calves: 100 },
-  "Wrist Curls 1 hand":             { Forearms: 100 },
-  "Wrist Extension 1 hand":         { Forearms: 100 }
+  "Wrist Curls 2 hand":             { Forearms: 100 },
+  "Wrist Extension 2 hand":         { Forearms: 100 }
 };
 
 function emptyMuscles() {
@@ -396,8 +396,8 @@ const exerciseFactors = {
   "Shoulder Press 2 arms": 0.26,
   "Squat bodyweight": 0.076,
   "Standing Calf Raises bodyweight": 0.06,
-  "Wrist Curls 1 hand": 0.43,
-  "Wrist Extension 1 hand": 0.39
+  "Wrist Curls 2 hand": 0.43,
+  "Wrist Extension 2 hand": 0.39
 };
 
 // Cardio coefficients – XP = coefficient * kilometers * 20000
