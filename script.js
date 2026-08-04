@@ -1344,7 +1344,7 @@ async function loadLeaderboards() {
 
   // ── Global (by Level) ───────────────────────────────────
   try {
-    const globalSnap = await db.collection('leaderboards').orderBy('level', 'desc').limit(20).get();
+    const globalSnap = await db.collection('leaderboards').orderBy('xp', 'desc').limit(20).get();
     let html = '<h3>🌍 Global Top 20</h3><ol>';
     globalSnap.forEach(doc => {
       const d = doc.data();
