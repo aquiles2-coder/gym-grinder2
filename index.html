@@ -11,9 +11,11 @@
   <div class="game">
     <header>
       <h1>🏋️ Gym Grinder</h1>
-      <div id="user-info" class="stats"></div>
-      <div id="stats" class="stats">Level: 1 | XP: 0/1000 | Strength: 10</div>
-      <button id="logout-btn" style="display: none;">Logout</button>
+      <div id="header-bar" class="header-bar" style="display: none;">
+        <button id="profile-btn" class="header-box tab-btn" data-tab="profile">👤 Profile</button>
+        <button class="header-box tab-btn" data-tab="builder">Create your train</button>
+        <button id="logout-btn" class="header-box header-logout">Logout</button>
+      </div>
     </header>
 
     <div id="auth-section">
@@ -28,17 +30,15 @@
     </div>
 
     <div id="main-game" style="display: none;">
-      <!-- Navigation tabs -->
-      <nav class="nav-tabs">
-        <button class="tab-btn active" data-tab="workout">Workout</button>
-        <button class="tab-btn" data-tab="cardio">Cardio</button>
-        <button class="tab-btn" data-tab="builder">Builder</button>
-        <button class="tab-btn" data-tab="trains">Trains</button>
-        <button class="tab-btn" data-tab="history">History</button>
-        <button class="tab-btn" data-tab="weekly">Weekly</button>
-        <button class="tab-btn" data-tab="profile">Profile</button>
-        <button class="tab-btn" data-tab="leaderboards">Leaderboards</button>
-      </nav>
+      <!-- Menu boxes -->
+      <div class="menu-grid">
+        <button class="menu-box tab-btn active" data-tab="workout">Workout</button>
+        <button class="menu-box tab-btn" data-tab="cardio">Cardio</button>
+        <button class="menu-box tab-btn" data-tab="trains">Personalized Trains</button>
+        <button class="menu-box tab-btn" data-tab="history">History</button>
+        <button class="menu-box tab-btn" data-tab="weekly">Week Progress</button>
+        <button class="menu-box tab-btn" data-tab="leaderboards">Leaderboards</button>
+      </div>
 
       <!-- Workout section -->
       <section id="workout" class="tab-content active">
@@ -63,7 +63,7 @@
 
       <!-- Builder section – create / edit personal trains (max 6) -->
       <section id="builder" class="tab-content" style="display: none;">
-        <h2>🏗️ Train Builder</h2>
+        <h2>🏗️ Create your train</h2>
         <p class="hint">Create up to 6 trains (strength + cardio). They become available for every player. Min. 3 exercises per train.</p>
         <div id="builder-status" class="stats"></div>
         <div id="builder-my-trains"></div>
@@ -73,7 +73,7 @@
 
       <!-- Trains section – use any pre-prepared train -->
       <section id="trains" class="tab-content" style="display: none;">
-        <h2>📋 Pre-prepared Trains</h2>
+        <h2>📋 Personalized Trains</h2>
         <p class="hint">Choose a body part, pick a train, fill weight &amp; reps (or km for cardio), then confirm.</p>
         <div id="trains-list"></div>
         <div id="trains-session" style="display: none;"></div>
@@ -88,7 +88,7 @@
 
       <!-- Weekly muscle progress section -->
       <section id="weekly" class="tab-content" style="display: none;">
-        <h2>📆 Weekly Muscle Progress</h2>
+        <h2>📆 Week Progress</h2>
         <p class="hint">XP gained this week per muscle. Resets every Monday with weekly XP.</p>
         <div id="weekly-header" class="stats"></div>
         <div id="weekly-muscle-grid" class="muscle-grid"></div>
