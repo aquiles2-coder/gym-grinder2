@@ -43,7 +43,11 @@
       <!-- Workout section -->
       <section id="workout" class="tab-content active">
         <h2>Log Workout</h2>
-        <select id="exercise-select"></select><br><br>
+        <div class="exercise-select-row">
+          <select id="exercise-select"></select>
+          <button type="button" id="workout-demo-btn" class="btn-small demo-btn">Demo</button>
+        </div>
+        <div id="workout-demo-container" class="demo-container" style="display: none;" aria-live="polite"></div>
         <input type="number" id="weight" placeholder="Weight (kg)" step="0.5">
         <input type="number" id="reps" placeholder="Reps" min="1">
         <button id="confirm-btn">CONFIRM SET 💪</button>
