@@ -1,4 +1,5 @@
 let db, auth, currentUser = null;
+let currentUserData = null;         // in-memory cache of the current user's Firestore document
 let workoutListenerAttached = false;
 let tabsListenerAttached = false;
 let lastLoggedSet = null; // stores the most recent workout set so we can undo it
@@ -11,9 +12,13 @@ let allTrainsCache = [];            // cached trains for body-part filtering
 let selectedBodyFilter = null;      // currently selected body part on Trains tab
 let copyTrainsCache = [];           // all trains available for "Copy existing train"
 let selectedCopyTrainId = null;     // train id selected in the copy searchable select
+let trainsCacheTime = 0;            // timestamp of last successful trains fetch
+let trainsDirty = true;             // true after create / edit / delete of a train
+const TRAINS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_TRAINS_PER_PLAYER = 6;
 const MIN_EXERCISES_PER_TRAIN = 3;
 const MAX_EXERCISES_PER_TRAIN = 10;
+const MAX_HISTORY_SETS = 30;        // keep only the newest N sets in History
 
 // ─── Custom Modal System (replaces alert / confirm / prompt) ───
 let _modalResolve = null;
@@ -273,6 +278,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } else {
       currentUser = null;
+      currentUserData = null;
+      lastLoggedSet = null;
+      lastLoggedCardio = null;
+      trainsDirty = true;
       show('auth-section', 'block');
       hide('main-game');
       hide('pending-section');
@@ -573,7 +582,8 @@ async function handleRegister() {
       lastWeeklyReset: getWeekStartString(),
       muscles: emptyMuscles(),
       weeklyMuscles: emptyMuscles(),
-      trainCount: 0             // used by security rules to enforce max 6 trains
+      trainCount: 0,            // used by security rules to enforce max 6 trains
+      setCount: 0               // tracks number of history sets so we can prune without full scans
     });
     await showAlert('✅ Account created!\n\nWaiting for approval.\nYou will be able to play once the app owner activates your account in Firebase.');
   } catch (error) {
@@ -665,6 +675,16 @@ async function loadUserData(uid) {
         }
       }
 
+      // Ensure setCount exists (one-time count of history sets for smart pruning)
+      if (typeof data.setCount !== 'number') {
+        try {
+          const setsSnap = await db.collection('users').doc(uid).collection('sets').get();
+          updates.setCount = setsSnap.size;
+        } catch (e) {
+          updates.setCount = 0;
+        }
+      }
+
       if (Object.keys(updates).length > 0) {
         await db.collection('users').doc(uid).update(updates);
       }
@@ -672,11 +692,34 @@ async function loadUserData(uid) {
       // Always keep the public leaderboard entry up to date
       // (also creates it the first time an approved user logs in)
       const finalData = { ...data, ...updates };
+      currentUserData = finalData;   // keep in-memory cache
       await syncLeaderboard(uid, finalData);
     }
   } catch (e) {
     console.error('loadUserData error:', e);
   }
+}
+
+/**
+ * Prune oldest history sets when we exceed MAX_HISTORY_SETS.
+ * Only reads the excess documents (not the whole collection).
+ * Updates setCount on the user document and the in-memory cache.
+ */
+async function pruneOldSets(userRef, currentCount) {
+  if (currentCount <= MAX_HISTORY_SETS) return currentCount;
+  const excess = currentCount - MAX_HISTORY_SETS;
+  const oldestSnap = await userRef.collection('sets')
+    .orderBy('createdAt', 'asc')
+    .limit(excess)
+    .get();
+  if (oldestSnap.empty) return currentCount;
+  const batch = db.batch();
+  oldestSnap.docs.forEach(d => batch.delete(d.ref));
+  const newCount = currentCount - oldestSnap.size;
+  batch.update(userRef, { setCount: newCount });
+  await batch.commit();
+  if (currentUserData) currentUserData.setCount = newCount;
+  return newCount;
 }
 
 function calculateCumulativeXP(level) {
@@ -697,10 +740,15 @@ function muscleProgress(xp) {
 
 async function loadProfile(uid) {
   try {
-    const doc = await db.collection('users').doc(uid).get();
-    if (!doc.exists) return;
+    // Prefer in-memory cache to avoid an extra read
+    let data = (currentUserData && currentUser && uid === currentUser.uid) ? currentUserData : null;
+    if (!data) {
+      const doc = await db.collection('users').doc(uid).get();
+      if (!doc.exists) return;
+      data = doc.data();
+      if (uid === currentUser?.uid) currentUserData = data;
+    }
 
-    const data = doc.data();
     const muscles = data.muscles || emptyMuscles();
     const nextLevelXP = calculateCumulativeXP(data.level || 1) + (data.level || 1) * 1000;
 
@@ -747,10 +795,15 @@ async function loadProfile(uid) {
 
 async function loadWeeklyProgress(uid) {
   try {
-    const doc = await db.collection('users').doc(uid).get();
-    if (!doc.exists) return;
+    // Prefer in-memory cache to avoid an extra read
+    let data = (currentUserData && currentUser && uid === currentUser.uid) ? currentUserData : null;
+    if (!data) {
+      const doc = await db.collection('users').doc(uid).get();
+      if (!doc.exists) return;
+      data = doc.data();
+      if (uid === currentUser?.uid) currentUserData = data;
+    }
 
-    const data = doc.data();
     const weekStart = getWeekStartString();
 
     // Ensure weeklyMuscles is current (in case reset hasn't run yet this session)
@@ -920,8 +973,17 @@ async function logWorkout() {
 
   try {
     const userRef = db.collection('users').doc(currentUser.uid);
-    const doc = await userRef.get();
-    const data = doc.data();
+
+    // Prefer in-memory cache; fall back to a single read only if needed
+    let data = currentUserData;
+    if (!data) {
+      const doc = await userRef.get();
+      if (!doc.exists) {
+        await showAlert('User data not found.');
+        return;
+      }
+      data = doc.data();
+    }
 
     let newXP = (data.xp || 0) + xpGain;
     let newLevel = data.level || 1;
@@ -964,6 +1026,8 @@ async function logWorkout() {
       updatedWeeklyMuscles[muscle] = (updatedWeeklyMuscles[muscle] || 0) + gain;
     }
 
+    const newSetCount = (typeof data.setCount === 'number' ? data.setCount : 0) + 1;
+
     await userRef.update({
       xp: newXP,
       level: newLevel,
@@ -973,8 +1037,24 @@ async function logWorkout() {
       weeklyXP: weeklyXP,
       lastWeeklyReset: weekStart,
       muscles: updatedMuscles,
-      weeklyMuscles: updatedWeeklyMuscles
+      weeklyMuscles: updatedWeeklyMuscles,
+      setCount: newSetCount
     });
+
+    // Update in-memory cache immediately
+    currentUserData = {
+      ...data,
+      xp: newXP,
+      level: newLevel,
+      strength: newStrength,
+      dailyXP,
+      lastDailyReset: today,
+      weeklyXP,
+      lastWeeklyReset: weekStart,
+      muscles: updatedMuscles,
+      weeklyMuscles: updatedWeeklyMuscles,
+      setCount: newSetCount
+    };
 
     // Save individual set for History page
     const setsRef = userRef.collection('sets');
@@ -986,16 +1066,11 @@ async function logWorkout() {
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    // Keep only the newest 30 sets – delete the oldest ones if over limit
-    const allSetsSnap = await setsRef.orderBy('createdAt', 'asc').get();
-    if (allSetsSnap.size > 30) {
-      const excess = allSetsSnap.size - 30;
-      const batch = db.batch();
-      allSetsSnap.docs.slice(0, excess).forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      await batch.commit();
-    }
+    // Smart prune: only read the excess oldest documents (not the whole collection)
+    await pruneOldSets(userRef, newSetCount);
+
+    // Keep public leaderboard in sync (write only, no extra reads)
+    await syncLeaderboard(currentUser.uid, currentUserData);
 
     // Store everything needed for a perfect undo
     lastLoggedSet = {
@@ -1022,8 +1097,12 @@ async function logWorkout() {
     if (logMsg) {
       logMsg.innerHTML = `✅ +${xpGain} XP from ${exercise}!<br><span class="muscle-gains">${muscleMsg}</span>`;
     }
-    await loadUserData(currentUser.uid);
-    loadLeaderboards();
+
+    // Refresh the profile button text (no extra read)
+    const profileBtn = document.getElementById('profile-btn');
+    if (profileBtn) {
+      profileBtn.textContent = `👤 ${currentUserData.nickname || 'Profile'} · Lv ${newLevel}`;
+    }
 
   } catch (error) {
     console.error('Workout error:', error);
@@ -1051,12 +1130,17 @@ async function undoLastSet() {
 
   try {
     const userRef = db.collection('users').doc(currentUser.uid);
-    const doc = await userRef.get();
-    if (!doc.exists) {
-      await showAlert('User data not found.');
-      return;
+
+    // Prefer in-memory cache
+    let data = currentUserData;
+    if (!data) {
+      const doc = await userRef.get();
+      if (!doc.exists) {
+        await showAlert('User data not found.');
+        return;
+      }
+      data = doc.data();
     }
-    const data = doc.data();
 
     // Subtract XP and recalculate level from the new total
     let newXP = Math.max(0, (data.xp || 0) - xpGain);
@@ -1083,6 +1167,7 @@ async function undoLastSet() {
     // Subtract daily / weekly XP (floor at 0)
     const newDailyXP = Math.max(0, (data.dailyXP || 0) - xpGain);
     const newWeeklyXP = Math.max(0, (data.weeklyXP || 0) - xpGain);
+    const newSetCount = Math.max(0, (typeof data.setCount === 'number' ? data.setCount : 1) - 1);
 
     await userRef.update({
       xp: newXP,
@@ -1091,11 +1176,28 @@ async function undoLastSet() {
       dailyXP: newDailyXP,
       weeklyXP: newWeeklyXP,
       muscles: updatedMuscles,
-      weeklyMuscles: updatedWeeklyMuscles
+      weeklyMuscles: updatedWeeklyMuscles,
+      setCount: newSetCount
     });
 
     // Delete the exact set document
     await userRef.collection('sets').doc(setId).delete();
+
+    // Update in-memory cache
+    currentUserData = {
+      ...data,
+      xp: newXP,
+      level: newLevel,
+      strength: newStrength,
+      dailyXP: newDailyXP,
+      weeklyXP: newWeeklyXP,
+      muscles: updatedMuscles,
+      weeklyMuscles: updatedWeeklyMuscles,
+      setCount: newSetCount
+    };
+
+    // Keep public leaderboard in sync
+    await syncLeaderboard(currentUser.uid, currentUserData);
 
     // Clear undo state and hide button
     lastLoggedSet = null;
@@ -1107,8 +1209,11 @@ async function undoLastSet() {
       logMsg.innerHTML = `↩️ Last set undone (−${xpGain} XP)`;
     }
 
-    await loadUserData(currentUser.uid);
-    loadLeaderboards();
+    // Refresh the profile button text
+    const profileBtn = document.getElementById('profile-btn');
+    if (profileBtn) {
+      profileBtn.textContent = `👤 ${currentUserData.nickname || 'Profile'} · Lv ${newLevel}`;
+    }
 
     // Refresh history if that tab is currently visible
     const historySection = document.getElementById('history');
@@ -1151,8 +1256,17 @@ async function logCardio() {
 
   try {
     const userRef = db.collection('users').doc(currentUser.uid);
-    const doc = await userRef.get();
-    const data = doc.data();
+
+    // Prefer in-memory cache
+    let data = currentUserData;
+    if (!data) {
+      const doc = await userRef.get();
+      if (!doc.exists) {
+        await showAlert('User data not found.');
+        return;
+      }
+      data = doc.data();
+    }
 
     let newXP = (data.xp || 0) + xpGain;
     let newLevel = data.level || 1;
@@ -1191,6 +1305,8 @@ async function logCardio() {
     const updatedWeeklyMuscles = { ...currentWeeklyMuscles };
     updatedWeeklyMuscles.Cardio = (updatedWeeklyMuscles.Cardio || 0) + xpGain;
 
+    const newSetCount = (typeof data.setCount === 'number' ? data.setCount : 0) + 1;
+
     await userRef.update({
       xp: newXP,
       level: newLevel,
@@ -1200,8 +1316,24 @@ async function logCardio() {
       weeklyXP: weeklyXP,
       lastWeeklyReset: weekStart,
       muscles: updatedMuscles,
-      weeklyMuscles: updatedWeeklyMuscles
+      weeklyMuscles: updatedWeeklyMuscles,
+      setCount: newSetCount
     });
+
+    // Update in-memory cache
+    currentUserData = {
+      ...data,
+      xp: newXP,
+      level: newLevel,
+      strength: newStrength,
+      dailyXP,
+      lastDailyReset: today,
+      weeklyXP,
+      lastWeeklyReset: weekStart,
+      muscles: updatedMuscles,
+      weeklyMuscles: updatedWeeklyMuscles,
+      setCount: newSetCount
+    };
 
     // Save individual session for History page
     const setsRef = userRef.collection('sets');
@@ -1213,16 +1345,11 @@ async function logCardio() {
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    // Keep only the newest 30 sets – delete the oldest ones if over limit
-    const allSetsSnap = await setsRef.orderBy('createdAt', 'asc').get();
-    if (allSetsSnap.size > 30) {
-      const excess = allSetsSnap.size - 30;
-      const batch = db.batch();
-      allSetsSnap.docs.slice(0, excess).forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      await batch.commit();
-    }
+    // Smart prune: only read the excess oldest documents
+    await pruneOldSets(userRef, newSetCount);
+
+    // Keep public leaderboard in sync
+    await syncLeaderboard(currentUser.uid, currentUserData);
 
     // Store everything needed for a perfect undo
     lastLoggedCardio = {
@@ -1242,8 +1369,12 @@ async function logCardio() {
     if (logMsg) {
       logMsg.innerHTML = `✅ +${xpGain} XP from ${exercise} (${km} km)!<br><span class="muscle-gains">Cardio +${xpGain}</span>`;
     }
-    await loadUserData(currentUser.uid);
-    loadLeaderboards();
+
+    // Refresh the profile button text
+    const profileBtn = document.getElementById('profile-btn');
+    if (profileBtn) {
+      profileBtn.textContent = `👤 ${currentUserData.nickname || 'Profile'} · Lv ${newLevel}`;
+    }
 
   } catch (error) {
     console.error('Cardio error:', error);
@@ -1271,12 +1402,17 @@ async function undoLastCardio() {
 
   try {
     const userRef = db.collection('users').doc(currentUser.uid);
-    const doc = await userRef.get();
-    if (!doc.exists) {
-      await showAlert('User data not found.');
-      return;
+
+    // Prefer in-memory cache
+    let data = currentUserData;
+    if (!data) {
+      const doc = await userRef.get();
+      if (!doc.exists) {
+        await showAlert('User data not found.');
+        return;
+      }
+      data = doc.data();
     }
-    const data = doc.data();
 
     // Subtract XP and recalculate level from the new total
     let newXP = Math.max(0, (data.xp || 0) - xpGain);
@@ -1299,6 +1435,7 @@ async function undoLastCardio() {
     // Subtract daily / weekly XP (floor at 0)
     const newDailyXP = Math.max(0, (data.dailyXP || 0) - xpGain);
     const newWeeklyXP = Math.max(0, (data.weeklyXP || 0) - xpGain);
+    const newSetCount = Math.max(0, (typeof data.setCount === 'number' ? data.setCount : 1) - 1);
 
     await userRef.update({
       xp: newXP,
@@ -1307,11 +1444,28 @@ async function undoLastCardio() {
       dailyXP: newDailyXP,
       weeklyXP: newWeeklyXP,
       muscles: updatedMuscles,
-      weeklyMuscles: updatedWeeklyMuscles
+      weeklyMuscles: updatedWeeklyMuscles,
+      setCount: newSetCount
     });
 
     // Delete the exact set document
     await userRef.collection('sets').doc(setId).delete();
+
+    // Update in-memory cache
+    currentUserData = {
+      ...data,
+      xp: newXP,
+      level: newLevel,
+      strength: newStrength,
+      dailyXP: newDailyXP,
+      weeklyXP: newWeeklyXP,
+      muscles: updatedMuscles,
+      weeklyMuscles: updatedWeeklyMuscles,
+      setCount: newSetCount
+    };
+
+    // Keep public leaderboard in sync
+    await syncLeaderboard(currentUser.uid, currentUserData);
 
     // Clear undo state and hide button
     lastLoggedCardio = null;
@@ -1323,8 +1477,11 @@ async function undoLastCardio() {
       logMsg.innerHTML = `↩️ Last cardio session undone (−${xpGain} XP)`;
     }
 
-    await loadUserData(currentUser.uid);
-    loadLeaderboards();
+    // Refresh the profile button text
+    const profileBtn = document.getElementById('profile-btn');
+    if (profileBtn) {
+      profileBtn.textContent = `👤 ${currentUserData.nickname || 'Profile'} · Lv ${newLevel}`;
+    }
 
     // Refresh history if that tab is currently visible
     const historySection = document.getElementById('history');
@@ -1452,12 +1609,18 @@ function exerciseLabel(name) {
   return `${name} ${exerciseIcon(name)}`;
 }
 
-/** Fetch current user's nickname (cached on user doc) */
+/** Fetch current user's nickname (uses in-memory cache when available) */
 async function getCurrentNickname() {
   if (!currentUser) return 'Unknown';
+  if (currentUserData && currentUserData.nickname) return currentUserData.nickname;
   try {
     const doc = await db.collection('users').doc(currentUser.uid).get();
-    return doc.exists ? (doc.data().nickname || 'Unknown') : 'Unknown';
+    if (doc.exists) {
+      const data = doc.data();
+      currentUserData = { ...(currentUserData || {}), ...data };
+      return data.nickname || 'Unknown';
+    }
+    return 'Unknown';
   } catch {
     return 'Unknown';
   }
@@ -1481,13 +1644,38 @@ async function loadBuilder() {
   listEl.innerHTML = '<p class="hint">Loading your trains…</p>';
 
   try {
-    // Load my trains + all trains (for copy) in parallel
-    const [mySnap, allSnap] = await Promise.all([
-      db.collection('trains').where('createdBy', '==', currentUser.uid).get(),
-      db.collection('trains').limit(100).get()
-    ]);
+    const cacheFresh = !trainsDirty && (Date.now() - trainsCacheTime < TRAINS_CACHE_TTL) && copyTrainsCache.length > 0;
 
-    const count = mySnap.size;
+    let myTrains = [];
+    if (cacheFresh) {
+      // Use existing caches – zero reads
+      myTrains = copyTrainsCache.filter(t => t.createdBy === currentUser.uid);
+    } else {
+      // Load my trains + all trains (for copy) in parallel
+      const [mySnap, allSnap] = await Promise.all([
+        db.collection('trains').where('createdBy', '==', currentUser.uid).get(),
+        db.collection('trains').limit(100).get()
+      ]);
+
+      copyTrainsCache = allSnap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => {
+          const nameA = (a.name || '').toLowerCase();
+          const nameB = (b.name || '').toLowerCase();
+          if (nameA !== nameB) return nameA.localeCompare(nameB);
+          return (a.createdByNickname || '').localeCompare(b.createdByNickname || '');
+        });
+
+      myTrains = mySnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      trainsCacheTime = Date.now();
+      trainsDirty = false;
+    }
+
+    // Prefer trainCount from user cache when available
+    const count = (currentUserData && typeof currentUserData.trainCount === 'number')
+      ? currentUserData.trainCount
+      : myTrains.length;
+
     if (statusEl) {
       statusEl.innerHTML = `Your trains: <strong>${count} / ${MAX_TRAINS_PER_PLAYER}</strong>`;
     }
@@ -1496,20 +1684,10 @@ async function loadBuilder() {
       createBtn.onclick = () => showBuilderForm(null);
     }
 
-    // Cache all trains for the copy searchable select
-    copyTrainsCache = allSnap.docs
-      .map(doc => ({ id: doc.id, ...doc.data() }))
-      .sort((a, b) => {
-        const nameA = (a.name || '').toLowerCase();
-        const nameB = (b.name || '').toLowerCase();
-        if (nameA !== nameB) return nameA.localeCompare(nameB);
-        return (a.createdByNickname || '').localeCompare(b.createdByNickname || '');
-      });
-
     // Sort my trains newest first
-    const docs = mySnap.docs.slice().sort((a, b) => {
-      const ta = a.data().createdAt?.toMillis?.() || 0;
-      const tb = b.data().createdAt?.toMillis?.() || 0;
+    const docs = myTrains.slice().sort((a, b) => {
+      const ta = a.createdAt?.toMillis?.() || 0;
+      const tb = b.createdAt?.toMillis?.() || 0;
       return tb - ta;
     });
 
@@ -1543,20 +1721,20 @@ async function loadBuilder() {
       html += '<p class="hint" style="margin-top:18px;">You have no trains yet. Create one or copy an existing train above!</p>';
     } else {
       html += '<p class="hint" style="margin-top:18px;margin-bottom:10px;">Your trains:</p>';
-      docs.forEach(doc => {
-        const t = doc.data();
+      docs.forEach(t => {
+        // t is already a plain object { id, ...data }
         const bodyTags = (t.bodyParts || []).map(b => `<span>${escapeHtml(b)}</span>`).join('');
         const attrName = String(t.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         html += `
-          <div class="train-card" data-id="${doc.id}">
+          <div class="train-card" data-id="${t.id}">
             <div class="train-card-header">
               <div class="train-name">${escapeHtml(t.name)}</div>
             </div>
             <div class="train-meta">${(t.exercises || []).length} exercises</div>
             <div class="train-bodyparts">${bodyTags || '—'}</div>
             <div class="train-actions">
-              <button type="button" class="btn-small" onclick="editTrain('${doc.id}')">Edit</button>
-              <button type="button" class="btn-small btn-danger" onclick="deleteTrain('${doc.id}', '${attrName}')">Delete</button>
+              <button type="button" class="btn-small" onclick="editTrain('${t.id}')">Edit</button>
+              <button type="button" class="btn-small btn-danger" onclick="deleteTrain('${t.id}', '${attrName}')">Delete</button>
             </div>
           </div>
         `;
@@ -1584,12 +1762,17 @@ function escapeHtml(str) {
 
 async function editTrain(trainId) {
   try {
-    const doc = await db.collection('trains').doc(trainId).get();
-    if (!doc.exists) {
-      await showAlert('Train not found.');
-      return;
+    // Prefer cache
+    let data = allTrainsCache.find(t => t.id === trainId)
+            || copyTrainsCache.find(t => t.id === trainId);
+    if (!data) {
+      const doc = await db.collection('trains').doc(trainId).get();
+      if (!doc.exists) {
+        await showAlert('Train not found.');
+        return;
+      }
+      data = { id: doc.id, ...doc.data() };
     }
-    const data = doc.data();
     if (data.createdBy !== currentUser.uid) {
       await showAlert('You can only edit your own trains.');
       return;
@@ -1605,13 +1788,20 @@ async function deleteTrain(trainId, name) {
   if (!(await showConfirm(`Delete train "${name}"?\n\nThis cannot be undone.`))) return;
 
   try {
-    const doc = await db.collection('trains').doc(trainId).get();
-    if (!doc.exists) {
-      await showAlert('Train already deleted.');
-      loadBuilder();
-      return;
+    // Prefer cache for ownership check
+    let data = allTrainsCache.find(t => t.id === trainId)
+            || copyTrainsCache.find(t => t.id === trainId);
+    if (!data) {
+      const doc = await db.collection('trains').doc(trainId).get();
+      if (!doc.exists) {
+        await showAlert('Train already deleted.');
+        trainsDirty = true;
+        loadBuilder();
+        return;
+      }
+      data = doc.data();
     }
-    if (doc.data().createdBy !== currentUser.uid) {
+    if (data.createdBy !== currentUser.uid) {
       await showAlert('You can only delete your own trains.');
       return;
     }
@@ -1626,6 +1816,14 @@ async function deleteTrain(trainId, name) {
       trainCount: firebase.firestore.FieldValue.increment(-1)
     });
     await batch.commit();
+
+    // Keep local caches consistent
+    if (currentUserData && typeof currentUserData.trainCount === 'number') {
+      currentUserData.trainCount = Math.max(0, currentUserData.trainCount - 1);
+    }
+    trainsDirty = true;
+    allTrainsCache = allTrainsCache.filter(t => t.id !== trainId);
+    copyTrainsCache = copyTrainsCache.filter(t => t.id !== trainId);
 
     await showAlert('Train deleted.');
     loadBuilder();
@@ -1929,22 +2127,27 @@ async function copySelectedTrain() {
   }
 
   try {
-    // Enforce max trains
-    const mySnap = await db.collection('trains')
-      .where('createdBy', '==', currentUser.uid)
-      .get();
-    if (mySnap.size >= MAX_TRAINS_PER_PLAYER) {
+    // Enforce max trains using in-memory trainCount when available
+    const currentCount = (currentUserData && typeof currentUserData.trainCount === 'number')
+      ? currentUserData.trainCount
+      : copyTrainsCache.filter(t => t.createdBy === currentUser.uid).length;
+    if (currentCount >= MAX_TRAINS_PER_PLAYER) {
       await showAlert(`You already have ${MAX_TRAINS_PER_PLAYER} trains. Delete one first.`);
       return;
     }
 
-    const doc = await db.collection('trains').doc(selectedCopyTrainId).get();
-    if (!doc.exists) {
-      await showAlert('That train no longer exists.');
-      return;
+    // Prefer cache; only hit network if the train is not in cache
+    let data = copyTrainsCache.find(t => t.id === selectedCopyTrainId)
+             || allTrainsCache.find(t => t.id === selectedCopyTrainId);
+    if (!data) {
+      const doc = await db.collection('trains').doc(selectedCopyTrainId).get();
+      if (!doc.exists) {
+        await showAlert('That train no longer exists.');
+        return;
+      }
+      data = { id: doc.id, ...doc.data() };
     }
 
-    const data = doc.data();
     const exercises = (data.exercises || []).map(ex => ({ ...ex })); // shallow clone
     const bodyParts = [...(data.bodyParts || [])];
     const baseName = data.name || 'Train';
@@ -2099,27 +2302,32 @@ async function saveTrain() {
   }
 
   try {
-    // Check max trains when creating
+    // Check max trains when creating – use in-memory trainCount when available
     if (!editingTrainId) {
-      const mySnap = await db.collection('trains')
-        .where('createdBy', '==', currentUser.uid)
-        .get();
-      if (mySnap.size >= MAX_TRAINS_PER_PLAYER) {
+      const currentCount = (currentUserData && typeof currentUserData.trainCount === 'number')
+        ? currentUserData.trainCount
+        : copyTrainsCache.filter(t => t.createdBy === currentUser.uid).length;
+      if (currentCount >= MAX_TRAINS_PER_PLAYER) {
         await showAlert(`You already have ${MAX_TRAINS_PER_PLAYER} trains. Delete one first.`);
         return;
       }
     }
 
-    // Unique name per player (case-insensitive)
+    // Unique name per player (case-insensitive) – use local cache first
     const nameLower = name.toLowerCase();
-    const nameCheck = await db.collection('trains')
-      .where('createdBy', '==', currentUser.uid)
-      .get();
-    let duplicate = false;
-    nameCheck.forEach(doc => {
-      if (doc.id === editingTrainId) return;
-      if ((doc.data().name || '').toLowerCase() === nameLower) duplicate = true;
-    });
+    const myCached = copyTrainsCache.filter(t => t.createdBy === currentUser.uid);
+    let duplicate = myCached.some(t => t.id !== editingTrainId && (t.name || '').toLowerCase() === nameLower);
+
+    // If cache is empty / dirty we still do a lightweight check only when needed
+    if (!duplicate && (trainsDirty || myCached.length === 0)) {
+      const nameCheck = await db.collection('trains')
+        .where('createdBy', '==', currentUser.uid)
+        .get();
+      nameCheck.forEach(doc => {
+        if (doc.id === editingTrainId) return;
+        if ((doc.data().name || '').toLowerCase() === nameLower) duplicate = true;
+      });
+    }
     if (duplicate) {
       await showAlert('You already have a train with this name. Choose a different name.');
       return;
@@ -2137,6 +2345,14 @@ async function saveTrain() {
 
     if (editingTrainId) {
       await db.collection('trains').doc(editingTrainId).update(payload);
+      // Update local caches
+      const updateIn = (arr) => {
+        const idx = arr.findIndex(t => t.id === editingTrainId);
+        if (idx !== -1) arr[idx] = { ...arr[idx], ...payload };
+      };
+      updateIn(allTrainsCache);
+      updateIn(copyTrainsCache);
+      trainsDirty = true;
       await showAlert('Train updated!');
     } else {
       // Create train + increment trainCount in one batch
@@ -2150,6 +2366,15 @@ async function saveTrain() {
         trainCount: firebase.firestore.FieldValue.increment(1)
       });
       await batch.commit();
+
+      // Keep local state consistent
+      if (currentUserData && typeof currentUserData.trainCount === 'number') {
+        currentUserData.trainCount += 1;
+      }
+      const newTrain = { id: newTrainRef.id, ...payload };
+      allTrainsCache.unshift(newTrain);
+      copyTrainsCache.push(newTrain);
+      trainsDirty = true;
       await showAlert('Train created! It is now available for every player.');
     }
 
@@ -2178,23 +2403,40 @@ async function loadTrainsList() {
   listEl.innerHTML = '<p class="hint">Loading trains…</p>';
 
   try {
-    // Prefer ordered query; fall back to unordered if index missing
-    let snap;
-    try {
-      snap = await db.collection('trains').orderBy('createdAt', 'desc').limit(80).get();
-    } catch (orderErr) {
-      console.warn('orderBy createdAt failed, falling back:', orderErr);
-      snap = await db.collection('trains').limit(80).get();
-    }
+    const cacheFresh = !trainsDirty && (Date.now() - trainsCacheTime < TRAINS_CACHE_TTL) && allTrainsCache.length > 0;
 
-    // Cache all trains (sorted newest first)
-    allTrainsCache = snap.docs
-      .map(doc => ({ id: doc.id, ...doc.data() }))
-      .sort((a, b) => {
-        const ta = a.createdAt?.toMillis?.() || 0;
-        const tb = b.createdAt?.toMillis?.() || 0;
-        return tb - ta;
-      });
+    if (!cacheFresh) {
+      // Prefer ordered query; fall back to unordered if index missing
+      let snap;
+      try {
+        snap = await db.collection('trains').orderBy('createdAt', 'desc').limit(80).get();
+      } catch (orderErr) {
+        console.warn('orderBy createdAt failed, falling back:', orderErr);
+        snap = await db.collection('trains').limit(80).get();
+      }
+
+      // Cache all trains (sorted newest first)
+      allTrainsCache = snap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => {
+          const ta = a.createdAt?.toMillis?.() || 0;
+          const tb = b.createdAt?.toMillis?.() || 0;
+          return tb - ta;
+        });
+
+      // Keep copyTrainsCache in sync when we fetch from Trains tab
+      if (copyTrainsCache.length === 0 || trainsDirty) {
+        copyTrainsCache = allTrainsCache.slice().sort((a, b) => {
+          const nameA = (a.name || '').toLowerCase();
+          const nameB = (b.name || '').toLowerCase();
+          if (nameA !== nameB) return nameA.localeCompare(nameB);
+          return (a.createdByNickname || '').localeCompare(b.createdByNickname || '');
+        });
+      }
+
+      trainsCacheTime = Date.now();
+      trainsDirty = false;
+    }
 
     renderTrainsFilterAndList();
   } catch (e) {
@@ -2286,13 +2528,18 @@ function selectBodyFilter(part) {
 
 async function startTrainSession(trainId) {
   try {
-    const doc = await db.collection('trains').doc(trainId).get();
-    if (!doc.exists) {
-      await showAlert('This train no longer exists.');
-      loadTrainsList();
-      return;
+    // Prefer cache to avoid a read
+    let train = allTrainsCache.find(t => t.id === trainId)
+             || copyTrainsCache.find(t => t.id === trainId);
+    if (!train) {
+      const doc = await db.collection('trains').doc(trainId).get();
+      if (!doc.exists) {
+        await showAlert('This train no longer exists.');
+        loadTrainsList();
+        return;
+      }
+      train = { id: doc.id, ...doc.data() };
     }
-    const train = { id: doc.id, ...doc.data() };
     if (!train.exercises || train.exercises.length < MIN_EXERCISES_PER_TRAIN) {
       await showAlert('This train is incomplete.');
       return;
@@ -2504,12 +2751,17 @@ async function confirmTrainSession() {
 
   try {
     const userRef = db.collection('users').doc(currentUser.uid);
-    const doc = await userRef.get();
-    if (!doc.exists) {
-      await showAlert('User data not found.');
-      return;
+
+    // Prefer in-memory cache
+    let data = currentUserData;
+    if (!data) {
+      const doc = await userRef.get();
+      if (!doc.exists) {
+        await showAlert('User data not found.');
+        return;
+      }
+      data = doc.data();
     }
-    const data = doc.data();
 
     // Aggregate XP & muscles
     let totalXpGain = 0;
@@ -2557,6 +2809,9 @@ async function confirmTrainSession() {
       updatedWeeklyMuscles[m] = (updatedWeeklyMuscles[m] || 0) + g;
     }
 
+    const addedSets = setsToLog.length;
+    const newSetCount = (typeof data.setCount === 'number' ? data.setCount : 0) + addedSets;
+
     await userRef.update({
       xp: newXP,
       level: newLevel,
@@ -2566,8 +2821,24 @@ async function confirmTrainSession() {
       weeklyXP,
       lastWeeklyReset: weekStart,
       muscles: updatedMuscles,
-      weeklyMuscles: updatedWeeklyMuscles
+      weeklyMuscles: updatedWeeklyMuscles,
+      setCount: newSetCount
     });
+
+    // Update in-memory cache
+    currentUserData = {
+      ...data,
+      xp: newXP,
+      level: newLevel,
+      strength: newStrength,
+      dailyXP,
+      lastDailyReset: today,
+      weeklyXP,
+      lastWeeklyReset: weekStart,
+      muscles: updatedMuscles,
+      weeklyMuscles: updatedWeeklyMuscles,
+      setCount: newSetCount
+    };
 
     // Save every entry to history (with trainName)
     const setsRef = userRef.collection('sets');
@@ -2599,14 +2870,11 @@ async function confirmTrainSession() {
     });
     await batch.commit();
 
-    // Keep only newest 30 sets
-    const allSetsSnap = await setsRef.orderBy('createdAt', 'asc').get();
-    if (allSetsSnap.size > 30) {
-      const excess = allSetsSnap.size - 30;
-      const delBatch = db.batch();
-      allSetsSnap.docs.slice(0, excess).forEach(d => delBatch.delete(d.ref));
-      await delBatch.commit();
-    }
+    // Smart prune: only read the excess oldest documents
+    await pruneOldSets(userRef, newSetCount);
+
+    // Keep public leaderboard in sync
+    await syncLeaderboard(currentUser.uid, currentUserData);
 
     // Success message
     let muscleMsg = Object.entries(totalMuscleGains)
@@ -2621,8 +2889,11 @@ async function confirmTrainSession() {
       (muscleMsg ? `(${muscleMsg})` : '')
     );
 
-    await loadUserData(currentUser.uid);
-    loadLeaderboards();
+    // Refresh the profile button text
+    const profileBtn = document.getElementById('profile-btn');
+    if (profileBtn) {
+      profileBtn.textContent = `👤 ${currentUserData.nickname || 'Profile'} · Lv ${newLevel}`;
+    }
 
     // Clear session and go back to list
     currentTrainSession = null;
