@@ -238,6 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupAuthListeners();
   setupLogout();
   setupTabs();
+  setupWorkoutDemo();
 
   auth.onAuthStateChanged(async (user) => {
     if (user) {
@@ -419,6 +420,112 @@ const cardioCoefficients = {
   "Bicycle": 0.033
 };
 
+// ─── Exercise Demo URLs ─────────────────────────────────────
+// Fill with Firebase Storage (or other) URLs later.
+// Empty string or missing key → "No demo for now"
+const exerciseDemoUrls = {
+  // Strength
+  "Bench Press 2 arms": "",
+  "Bent-over Row 2 arms": "",
+  "Biceps Curl 1 arm": "",
+  "Bulgarian Split Squat 1 leg bodyweight": "",
+  "Chest Fly 1 arm": "",
+  "Chin Ups bodyweight": "",
+  "Crunches": "",
+  "Deadlift 2 arms": "",
+  "Dip bodyweight": "",
+  "Glute Kickback Machine 1 leg": "",
+  "Hammer Curl 1 arm": "",
+  "Hip Abduction 2 legs": "",
+  "Incline Bench Press 2 arms": "",
+  "Lateral Raise 1 arm": "",
+  "Leg Abduction 2 legs": "",
+  "Leg Curl 2 legs": "",
+  "Leg Extension 2 legs": "",
+  "Leg Press 2 legs": "",
+  "Lying Leg Raises bodyweight": "",
+  "Lying Triceps Extension 2 arms": "",
+  "Pull Ups bodyweight": "",
+  "Pull-down 2 arms": "",
+  "Push Ups bodyweight": "",
+  "Push-down 2 arms": "",
+  "Row 2 arms": "",
+  "Seated Calf Raises 2 legs": "",
+  "Shoulder Press 2 arms": "",
+  "Squat bodyweight": "",
+  "Standing Calf Raises bodyweight": "",
+  "Wrist Curls 2 hand": "",
+  "Wrist Extension 2 hand": "",
+  // Cardio (can appear in trains)
+  "Stair": "",
+  "Swim": "",
+  "Run": "",
+  "Walk": "",
+  "Row": "",
+  "Bicycle": ""
+};
+
+// Currently open demo key (e.g. "workout:Bench Press 2 arms" or "train:2:Squat bodyweight")
+let openDemoKey = null;
+
+/** Close any open demo (pause video, hide container, clear active button) */
+function closeAnyOpenDemo() {
+  if (!openDemoKey) return;
+
+  // Pause & clear any playing video
+  document.querySelectorAll('.demo-container video').forEach(v => {
+    try { v.pause(); v.removeAttribute('src'); v.load(); } catch (_) {}
+  });
+
+  // Hide all demo containers
+  document.querySelectorAll('.demo-container').forEach(c => {
+    c.style.display = 'none';
+    c.innerHTML = '';
+  });
+
+  // Remove active style from all demo buttons
+  document.querySelectorAll('.demo-btn.active-demo').forEach(b => {
+    b.classList.remove('active-demo');
+  });
+
+  openDemoKey = null;
+}
+
+/**
+ * Toggle a demo for the given exercise.
+ * @param {string} key        Unique key for this demo instance
+ * @param {string} exerciseName
+ * @param {HTMLElement} container  The .demo-container element to fill
+ * @param {HTMLElement} [btn]      Optional button to mark as active
+ */
+function toggleExerciseDemo(key, exerciseName, container, btn) {
+  if (!container) return;
+
+  // Second click on the same demo → close
+  if (openDemoKey === key) {
+    closeAnyOpenDemo();
+    return;
+  }
+
+  // Close any other open demo first
+  closeAnyOpenDemo();
+
+  openDemoKey = key;
+  if (btn) btn.classList.add('active-demo');
+
+  const url = (exerciseDemoUrls[exerciseName] || '').trim();
+  if (!url) {
+    container.innerHTML = `<div class="demo-placeholder">No demo for now</div>`;
+  } else {
+    container.innerHTML = `
+      <video class="demo-video"
+             src="${escapeHtml(url)}"
+             muted loop playsinline autoplay
+             preload="metadata"></video>`;
+  }
+  container.style.display = 'block';
+}
+
 function populateExercises() {
   const select = document.getElementById('exercise-select');
   if (!select) return;
@@ -449,6 +556,36 @@ function populateCardioExercises() {
     opt.value = ex;
     opt.textContent = ex;
     select.appendChild(opt);
+  });
+}
+
+/** Wire Demo button + select change on the Workout tab */
+function setupWorkoutDemo() {
+  const btn = document.getElementById('workout-demo-btn');
+  const select = document.getElementById('exercise-select');
+  const container = document.getElementById('workout-demo-container');
+  if (!btn || !select || !container) return;
+
+  btn.addEventListener('click', () => {
+    const exercise = select.value;
+    if (!exercise) return;
+    const key = `workout:${exercise}`;
+    toggleExerciseDemo(key, exercise, container, btn);
+  });
+
+  // If the user changes exercise while a workout demo is open, refresh it
+  select.addEventListener('change', () => {
+    if (openDemoKey && openDemoKey.startsWith('workout:')) {
+      const exercise = select.value;
+      if (!exercise) {
+        closeAnyOpenDemo();
+        return;
+      }
+      // Force open the new exercise (closeAnyOpenDemo is called inside toggle)
+      openDemoKey = null; // reset so toggle treats it as a new open
+      const key = `workout:${exercise}`;
+      toggleExerciseDemo(key, exercise, container, btn);
+    }
   });
 }
 
@@ -490,6 +627,9 @@ function setupTabs() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.dataset.tab;
+
+      // Close any open exercise demo when changing tabs
+      closeAnyOpenDemo();
 
       // Update buttons
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -2392,7 +2532,8 @@ async function loadTrainsList() {
   const sessionEl = document.getElementById('trains-session');
   if (!listEl) return;
 
-  // Reset session view
+  // Reset session view + close any open demo
+  closeAnyOpenDemo();
   if (sessionEl) {
     sessionEl.style.display = 'none';
     sessionEl.innerHTML = '';
@@ -2545,6 +2686,7 @@ async function startTrainSession(trainId) {
       return;
     }
 
+    closeAnyOpenDemo();
     currentTrainSession = train;
 
     const listEl = document.getElementById('trains-list');
@@ -2568,7 +2710,13 @@ async function startTrainSession(trainId) {
         : '';
       html += `
         <div class="session-exercise" data-ex-index="${exIdx}" data-type="${isCardio ? 'cardio' : 'strength'}">
-          <div class="session-exercise-title">${exIdx + 1}. ${escapeHtml(ex.exercise)}${icon}</div>
+          <div class="session-exercise-title">
+            <span class="title-text">${exIdx + 1}. ${escapeHtml(ex.exercise)}${icon}</span>
+            <button type="button" class="btn-small demo-btn"
+                    data-demo-ex="${exIdx}"
+                    data-exercise="${escapeHtml(ex.exercise)}">Demo</button>
+          </div>
+          <div class="demo-container" data-demo-container="${exIdx}" style="display: none;" aria-live="polite"></div>
           ${noteHtml}
       `;
 
@@ -2612,6 +2760,18 @@ async function startTrainSession(trainId) {
     sessionEl.querySelectorAll('.set-weight, .set-reps, .set-km').forEach(inp => {
       inp.addEventListener('input', updateSessionXpPreview);
     });
+
+    // Wire Demo buttons inside the train session (only one open at a time)
+    sessionEl.querySelectorAll('.demo-btn[data-demo-ex]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const exIdx = btn.getAttribute('data-demo-ex');
+        const exercise = btn.getAttribute('data-exercise');
+        const container = sessionEl.querySelector(`.demo-container[data-demo-container="${exIdx}"]`);
+        if (!container || !exercise) return;
+        const key = `train:${exIdx}:${exercise}`;
+        toggleExerciseDemo(key, exercise, container, btn);
+      });
+    });
   } catch (e) {
     console.error('startTrainSession error:', e);
     await showAlert('Error starting train.');
@@ -2652,6 +2812,7 @@ function updateSessionXpPreview() {
 }
 
 function cancelTrainSession() {
+  closeAnyOpenDemo();
   currentTrainSession = null;
   const sessionEl = document.getElementById('trains-session');
   if (sessionEl) {
