@@ -956,10 +956,20 @@ select:focus, input[type="number"]:focus {
 }
 
 .session-exercise-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 16px;
   font-weight: bold;
   color: #ffff00;
   margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.session-exercise-title .title-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .session-note {
@@ -1022,5 +1032,73 @@ select:focus, input[type="number"]:focus {
   font-size: 12px;
   color: #ffaa00;
   margin-bottom: 3px;
+}
+
+/* ─── Exercise Demo (Workout + Train session) ─── */
+.exercise-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.exercise-select-row select {
+  margin: 0;
+  max-width: min(320px, 70vw);
+}
+
+.demo-btn {
+  background: #1a3a1a !important;
+  border: 1px solid #00ff88 !important;
+  color: #00ff88 !important;
+  font-size: 13px !important;
+  padding: 6px 12px !important;
+  margin: 0 !important;
+  white-space: nowrap;
+}
+
+.demo-btn:hover {
+  background: #00ff88 !important;
+  color: #000 !important;
+}
+
+.demo-btn.active-demo {
+  background: #00ff88 !important;
+  color: #000 !important;
+  font-weight: bold;
+}
+
+.demo-container {
+  max-width: 360px;
+  margin: 8px auto 14px;
+  background: rgba(0, 20, 0, 0.75);
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  border-radius: 10px;
+  padding: 8px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.demo-container .demo-video {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  border-radius: 6px;
+  background: #000;
+}
+
+.demo-container .demo-placeholder {
+  color: #88aa88;
+  font-size: 14px;
+  padding: 18px 10px;
+  font-style: italic;
+}
+
+/* Demo inside train session – left aligned with the exercise block */
+.session-exercise .demo-container {
+  margin: 8px 0 10px;
+  max-width: 100%;
 }
 
