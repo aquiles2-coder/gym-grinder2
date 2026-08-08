@@ -7,7 +7,7 @@ A gamified workout tracker. Log work out sets and cardio, gain XP, level up, tra
 ## Features
 
 - **Strength logging** – Exercise + weight + reps → XP
-- **Cardio logging** – Distance (km) → XP
+- **Cardio logging** – Exercise + Distance (km) → XP
 - **Level & Strength system** – XP increases your level and Strength stat
 - **Muscle progress** – Every exercise distributes XP to the muscles it works (Chest, Back, Shoulders, Biceps, Triceps, Forearms, Core, Quads, Hamstrings, Glutes, Calves + Cardio)
 - **Personalized Trains** – Create up to 6 shared workout templates (min 3 exercises). Anyone can use them.
