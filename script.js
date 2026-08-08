@@ -397,7 +397,7 @@ const exerciseFactors = {
   "Leg Press 2 legs": 0.07,
   "Lying Leg Raises bodyweight": 0.12,
   "Lying Triceps Extension 2 arms": 0.38,
-  "Pull Ups bodyweight": 0.15,
+  "Pull Ups bodyweight": 0.2,
   "Pull-down 2 arms": 0.19,
   "Push Ups bodyweight": 0.106,
   "Push-down 2 arms": 0.29,
