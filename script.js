@@ -380,7 +380,7 @@ const exerciseFactors = {
   "Bench Press 2 arms": 0.17,
   "Bent-over Row 2 arms": 0.18,
   "Biceps Curl 1 arm": 0.76,
-  "Bulgarian Split Squat 1 leg bodyweight": 0.10,
+  "Bulgarian Split Squat 1 leg bodyweight": 0.14,
   "Chest Fly 1 arm": 0.70,
   "Chin Ups bodyweight": 0.14,
   "Crunches": 0.2,
