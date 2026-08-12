@@ -384,7 +384,7 @@ const exerciseFactors = {
   "Chest Fly 1 arm": 0.70,
   "Chin Ups bodyweight": 0.14,
   "Crunches": 0.2,
-  "Deadlift 2 arms": 0.15,
+  "Deadlift 2 arms": 0.20,
   "Dip bodyweight": 0.13,
   "Glute Kickback Machine 1 leg": 0.30,
   "Hammer Curl 1 arm": 0.70,
@@ -405,7 +405,7 @@ const exerciseFactors = {
   "Seated Calf Raises 2 legs": 0.15,
   "Shoulder Press 2 arms": 0.26,
   "Squat bodyweight": 0.076,
-  "Standing Calf Raises bodyweight": 0.06,
+  "Standing Calf Raises bodyweight": 0.08,
   "Wrist Curls 2 hand": 0.43,
   "Wrist Extension 2 hand": 0.39
 };
