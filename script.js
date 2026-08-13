@@ -426,9 +426,9 @@ const cardioCoefficients = {
 const exerciseDemoUrls = {
   // Strength
   "Bench Press 2 arms": "https://firebasestorage.googleapis.com/v0/b/gym-grinder2.firebasestorage.app/o/exercise-demos%2FBench%20Press.mp4?alt=media&token=aa7d0edf-7131-40c0-9521-0c8b4db458f6",
-  "Bent-over Row 2 arms": "",
-  "Biceps Curl 1 arm": "",
-  "Bulgarian Split Squat 1 leg bodyweight": "",
+  "Bent-over Row 2 arms": "https://firebasestorage.googleapis.com/v0/b/gym-grinder2.firebasestorage.app/o/exercise-demos%2FBent-over%20Row%202%20arms.mp4?alt=media&token=4aa16597-d1ea-4438-842e-0253c4989fb2",
+  "Biceps Curl 1 arm": "https://firebasestorage.googleapis.com/v0/b/gym-grinder2.firebasestorage.app/o/exercise-demos%2FBiceps%20Curl%201%20arm.mp4?alt=media&token=7c3f52c7-9450-4bf5-a6f9-6d35ec596917",
+  "Bulgarian Split Squat 1 leg bodyweight": "https://firebasestorage.googleapis.com/v0/b/gym-grinder2.firebasestorage.app/o/exercise-demos%2FBulgarian%20Split%20Squat.mp4?alt=media&token=1e72889b-8ef4-4cf2-b160-04f671322ebe",
   "Chest Fly 1 arm": "",
   "Chin Ups bodyweight": "",
   "Crunches": "",
