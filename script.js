@@ -425,7 +425,7 @@ const cardioCoefficients = {
 // Empty string or missing key → "No demo for now"
 const exerciseDemoUrls = {
   // Strength
-  "Bench Press 2 arms": "",
+  "Bench Press 2 arms": "https://firebasestorage.googleapis.com/v0/b/gym-grinder2.firebasestorage.app/o/exercise-demos%2FBench%20Press.mp4?alt=media&token=aa7d0edf-7131-40c0-9521-0c8b4db458f6",
   "Bent-over Row 2 arms": "",
   "Biceps Curl 1 arm": "",
   "Bulgarian Split Squat 1 leg bodyweight": "",
@@ -443,7 +443,7 @@ const exerciseDemoUrls = {
   "Leg Curl 2 legs": "",
   "Leg Extension 2 legs": "",
   "Leg Press 2 legs": "",
-  "Lying Leg Raises bodyweight": "",
+  "Lying Leg Raises bodyweight": "https://firebasestorage.googleapis.com/v0/b/gym-grinder2.firebasestorage.app/o/exercise-demos%2FLying%20Leg%20Raises.mp4?alt=media&token=68e19f09-8b2a-4ddc-ad36-f71e8e8fc544",
   "Lying Triceps Extension 2 arms": "",
   "Pull Ups bodyweight": "",
   "Pull-down 2 arms": "",
