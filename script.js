@@ -394,7 +394,7 @@ const exerciseFactors = {
   "Leg Abduction 2 legs": 0.11,
   "Leg Curl 2 legs": 0.25,
   "Leg Extension 2 legs": 0.16,
-  "Leg Press 2 legs": 0.07,
+  "Leg Press 2 legs": 0.075,
   "Lying Leg Raises bodyweight": 0.12,
   "Lying Triceps Extension 2 arms": 0.38,
   "Pull Ups bodyweight": 0.17,
@@ -402,10 +402,10 @@ const exerciseFactors = {
   "Push Ups bodyweight": 0.10,
   "Push-down 2 arms": 0.29,
   "Row 2 arms": 0.2,
-  "Seated Calf Raises 2 legs": 0.15,
+  "Seated Calf Raises 2 legs": 0.16,
   "Shoulder Press 2 arms": 0.26,
-  "Squat bodyweight": 0.076,
-  "Standing Calf Raises bodyweight": 0.08,
+  "Squat bodyweight": 0.08,
+  "Standing Calf Raises bodyweight": 0.09,
   "Wrist Curls 2 hand": 0.43,
   "Wrist Extension 2 hand": 0.39
 };
