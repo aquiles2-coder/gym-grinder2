@@ -378,7 +378,7 @@ function emptyMuscles() {
 // Ordered alphabetically
 const exerciseFactors = {
   "Bench Press 2 arms": 0.17,
-  "Bent-over Row 2 arms": 0.18,
+  "Bent-over Row 2 arms": 0.22,
   "Biceps Curl 1 arm": 0.76,
   "Bulgarian Split Squat 1 leg bodyweight": 0.14,
   "Chest Fly 1 arm": 0.70,
