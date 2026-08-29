@@ -8,6 +8,6 @@ const firebaseConfig = {
   measurementId: "G-MT6H4MVTLV"
 };
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-console.log("✅ Firebase initialized successfully!");
+// TEMPORARY LOCKDOWN — do not connect while the app is offline
+// firebase.initializeApp(firebaseConfig);
+console.log("Firebase is temporarily disabled.");
