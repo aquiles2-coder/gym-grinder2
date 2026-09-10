@@ -18,13 +18,7 @@
       <h1>🏋️ Gym Grinder</h1>
     </header>
 
-    <div id="offline-section" class="stats">
-      <h2>Temporarily offline</h2>
-      <p>Gym Grinder is taken down for a short time.<br>
-      Come back later.</p>
-    </div>
-
-    <div id="auth-section" style="display: none;">
+    <div id="auth-section">
       <button id="login-btn">Login</button>
       <button id="register-btn">Register</button>
     </div>
@@ -45,7 +39,102 @@
         <button class="menu-box tab-btn" data-tab="weekly">Week Progress</button>
         <button class="menu-box tab-btn" data-tab="leaderboards">Leaderboards</button>
       </div>
+
+      <!-- Workout section -->
+      <section id="workout" class="tab-content active">
+        <h2>Log Workout</h2>
+        <div class="exercise-select-row">
+          <select id="exercise-select"></select>
+          <button type="button" id="workout-demo-btn" class="btn-small demo-btn">Demo</button>
+        </div>
+        <div id="workout-demo-container" class="demo-container" style="display: none;" aria-live="polite"></div>
+        <input type="number" id="weight" placeholder="Weight (kg)" step="0.5">
+        <input type="number" id="reps" placeholder="Reps" min="1">
+        <button id="confirm-btn">CONFIRM SET 💪</button>
+        <button id="undo-btn" style="display: none;">UNDO LAST SET ↩️</button>
+        <p id="log-message"></p>
+      </section>
+
+      <!-- Cardio section -->
+      <section id="cardio" class="tab-content" style="display: none;">
+        <h2>Log Cardio</h2>
+        <select id="cardio-select"></select><br><br>
+        <input type="number" id="kilometers" placeholder="Kilometers" step="0.1" min="0.1">
+        <button id="cardio-confirm-btn">CONFIRM 🏃</button>
+        <button id="cardio-undo-btn" style="display: none;">UNDO LAST ↩️</button>
+        <p id="cardio-log-message"></p>
+      </section>
+
+      <!-- Builder section – create / edit personal trains (max 6) -->
+      <section id="builder" class="tab-content" style="display: none;">
+        <h2>🏗️ Create your train</h2>
+        <p class="hint">Create up to 6 trains (strength + cardio). They become available for every player. Min. 3 exercises per train.</p>
+        <div id="builder-status" class="stats"></div>
+        <div id="builder-my-trains"></div>
+        <button id="builder-create-btn" type="button">+ Create New Train</button>
+        <div id="builder-form" style="display: none;"></div>
+      </section>
+
+      <!-- Trains section – use any pre-prepared train -->
+      <section id="trains" class="tab-content" style="display: none;">
+        <h2>📋 Personalized Trains</h2>
+        <p class="hint">Choose a body part, pick a train, fill weight &amp; reps (or km for cardio), then confirm.</p>
+        <div id="trains-list"></div>
+        <div id="trains-session" style="display: none;"></div>
+      </section>
+
+      <!-- History section – last 30 confirmed sets -->
+      <section id="history" class="tab-content" style="display: none;">
+        <h2>📜 Recent Sets</h2>
+        <p class="hint">Last 30 confirmed sets</p>
+        <div id="sets-list"></div>
+      </section>
+
+      <!-- Weekly muscle progress section -->
+      <section id="weekly" class="tab-content" style="display: none;">
+        <h2>📆 Week Progress</h2>
+        <p class="hint">XP gained this week per muscle. Resets every Monday with weekly XP.</p>
+        <div id="weekly-header" class="stats"></div>
+        <div id="weekly-muscle-grid" class="muscle-grid"></div>
+      </section>
+
+      <!-- Profile section -->
+      <section id="profile" class="tab-content" style="display: none;">
+        <h2>👤 Your Profile</h2>
+        <div id="profile-header" class="stats"></div>
+        <h3>Muscle Progress</h3>
+        <p class="hint">Each exercise distributes XP to the muscles it works. Lifetime totals.</p>
+        <div id="muscle-grid" class="muscle-grid"></div>
+      </section>
+
+      <!-- Leaderboards section -->
+      <section id="leaderboards" class="tab-content" style="display: none;">
+        <h2>Leaderboards</h2>
+        <div id="global-lb" class="stats"></div>
+        <div id="daily-lb" class="stats"></div>
+        <div id="weekly-lb" class="stats"></div>
+      </section>
     </div>
   </div>
+
+  <!-- Custom Modal (replaces browser alert / confirm / prompt) -->
+  <div id="modal-overlay" class="modal-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h3 id="modal-title">Gym Grinder</h3>
+      <div id="modal-body"></div>
+      <div id="modal-actions">
+        <button id="modal-cancel" type="button" style="display: none;">Cancel</button>
+        <button id="modal-ok" type="button">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase Scripts -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  
+  <script src="firebase-config.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
