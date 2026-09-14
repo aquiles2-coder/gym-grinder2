@@ -20,6 +20,12 @@ const MIN_EXERCISES_PER_TRAIN = 3;
 const MAX_EXERCISES_PER_TRAIN = 10;
 const MAX_HISTORY_SETS = 30;        // keep only the newest N sets in History
 
+// ─── Single active login (one device / browser at a time) ───
+const SESSION_STORAGE_KEY = 'gg_activeSessionId';
+let sessionUnsub = null;            // unsubscribe for the session listener
+let pendingNewSession = false;      // true after an explicit Login click
+let kickedByOtherSession = false;   // true when this device was kicked out
+
 // ─── Custom Modal System (replaces alert / confirm / prompt) ───
 let _modalResolve = null;
 
@@ -85,6 +91,22 @@ function showModal(options = {}) {
       const form = document.createElement('div');
       form.className = 'modal-form';
       options.fields.forEach(f => {
+        if (f.type === 'checkbox') {
+          const row = document.createElement('label');
+          row.className = 'modal-check-row';
+          row.htmlFor = 'modal-field-' + f.id;
+          const input = document.createElement('input');
+          input.id = 'modal-field-' + f.id;
+          input.type = 'checkbox';
+          input.checked = !!f.checked;
+          const text = document.createElement('span');
+          if (f.htmlLabel) text.innerHTML = f.htmlLabel;
+          else text.textContent = f.label || f.id;
+          row.appendChild(input);
+          row.appendChild(text);
+          form.appendChild(row);
+          return;
+        }
         const label = document.createElement('label');
         label.htmlFor = 'modal-field-' + f.id;
         label.textContent = f.label || f.id;
@@ -122,10 +144,25 @@ function showModal(options = {}) {
         let valid = true;
         options.fields.forEach(f => {
           const input = document.getElementById('modal-field-' + f.id);
-          values[f.id] = input ? input.value.trim() : '';
+          if (!input) {
+            values[f.id] = f.type === 'checkbox' ? false : '';
+          } else if (f.type === 'checkbox') {
+            values[f.id] = input.checked;
+          } else {
+            values[f.id] = input.value.trim();
+          }
         });
         // Basic required check
         for (const f of options.fields) {
+          if (f.type === 'checkbox') {
+            if (f.required && !values[f.id]) {
+              const errEl = document.getElementById('modal-form-error');
+              if (errEl) errEl.textContent = f.requiredMessage || 'Please accept to continue.';
+              valid = false;
+              break;
+            }
+            continue;
+          }
           if (!values[f.id]) {
             const errEl = document.getElementById('modal-form-error');
             if (errEl) errEl.textContent = 'Please fill in all fields.';
@@ -209,7 +246,14 @@ function showRegisterForm() {
     fields: [
       { id: 'nickname', label: 'Nickname', type: 'text', placeholder: 'Choose a Nickname' },
       { id: 'password', label: 'Password (min 6 chars)', type: 'password', placeholder: 'Choose a Password' },
-      { id: 'confirmPassword', label: 'Confirm Password', type: 'password', placeholder: 'Confirm Password' }
+      { id: 'confirmPassword', label: 'Confirm Password', type: 'password', placeholder: 'Confirm Password' },
+      {
+        id: 'acceptLegal',
+        type: 'checkbox',
+        required: true,
+        requiredMessage: 'Please accept the Privacy Policy and Terms of Use.',
+        htmlLabel: 'I am 16 or older and I accept the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> and <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a>, including processing of my workout data.'
+      }
     ],
     okText: 'Create Account',
     cancelText: 'Cancel'
@@ -237,6 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
   populateCardioExercises();
   setupAuthListeners();
   setupLogout();
+  setupDeleteAccount();
   setupTabs();
   setupWorkoutDemo();
 
@@ -246,6 +291,9 @@ document.addEventListener('DOMContentLoaded', () => {
       hide('auth-section');
 
       try {
+        const sessionOk = await establishSingleSession(user);
+        if (!sessionOk) return;
+
         const doc = await db.collection('users').doc(user.uid).get();
 
         if (!doc.exists) {
@@ -278,6 +326,11 @@ document.addEventListener('DOMContentLoaded', () => {
         show('pending-section', 'block');
       }
     } else {
+      stopSessionListener();
+      if (!kickedByOtherSession) {
+        clearLocalSessionId();
+      }
+      kickedByOtherSession = false;
       currentUser = null;
       currentUserData = null;
       lastLoggedSet = null;
@@ -290,6 +343,107 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+function generateSessionId() {
+  if (window.crypto && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+}
+
+function getLocalSessionId() {
+  try { return localStorage.getItem(SESSION_STORAGE_KEY); } catch (_) { return null; }
+}
+
+function setLocalSessionId(id) {
+  try { localStorage.setItem(SESSION_STORAGE_KEY, id); } catch (_) {}
+}
+
+function clearLocalSessionId() {
+  try { localStorage.removeItem(SESSION_STORAGE_KEY); } catch (_) {}
+}
+
+function stopSessionListener() {
+  if (sessionUnsub) {
+    sessionUnsub();
+    sessionUnsub = null;
+  }
+}
+
+function startSessionListener(uid, sessionId) {
+  stopSessionListener();
+  sessionUnsub = db.collection('users').doc(uid).onSnapshot((snap) => {
+    if (!snap.exists) return;
+    const remoteId = snap.data().activeSessionId;
+    if (remoteId && remoteId !== sessionId) {
+      kickedByOtherSession = true;
+      stopSessionListener();
+      clearLocalSessionId();
+      auth.signOut().then(() => {
+        showAlert('You were signed out because this account logged in on another device.\nOnly one login is allowed at a time.');
+      }).catch((e) => console.error('signOut after session kick:', e));
+    }
+  }, (err) => {
+    console.error('Session listener error:', err);
+  });
+}
+
+/**
+ * Enforce a single active session per account.
+ * - Explicit Login / first visit on this browser: claim a new session (kicks the other device).
+ * - Page refresh on the same browser: keep the stored session if it still matches Firestore.
+ * - Stale session (logged in elsewhere): sign out and block this device.
+ * Returns false when the user was signed out.
+ */
+async function establishSingleSession(user) {
+  const userRef = db.collection('users').doc(user.uid);
+  const doc = await userRef.get();
+
+  if (!doc.exists) {
+    // Registration may still be writing the user document
+    return true;
+  }
+
+  const data = doc.data();
+  const localId = getLocalSessionId();
+  const remoteId = data.activeSessionId || null;
+  const takeOver = pendingNewSession || !localId;
+  pendingNewSession = false;
+
+  if (!takeOver && remoteId && localId !== remoteId) {
+    kickedByOtherSession = true;
+    clearLocalSessionId();
+    await auth.signOut();
+    await showAlert('This account is already logged in on another device.\nOnly one login is allowed at a time.');
+    return false;
+  }
+
+  let sessionId = localId;
+  if (takeOver) {
+    sessionId = generateSessionId();
+    setLocalSessionId(sessionId);
+    try {
+      await userRef.update({
+        activeSessionId: sessionId,
+        sessionUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (e) {
+      console.error('Could not claim session:', e);
+    }
+  } else if (!remoteId && localId) {
+    try {
+      await userRef.update({
+        activeSessionId: localId,
+        sessionUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (e) {
+      console.error('Could not write session id:', e);
+    }
+  }
+
+  startSessionListener(user.uid, sessionId);
+  return true;
+}
 
 function show(id, display = 'block') {
   const el = document.getElementById(id);
@@ -611,6 +765,8 @@ function setupLogout() {
   if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
       try {
+        stopSessionListener();
+        clearLocalSessionId();
         await auth.signOut();
         await showAlert('Logged out successfully!');
       } catch (error) {
@@ -619,6 +775,102 @@ function setupLogout() {
     });
   } else {
     console.error('logout-btn not found in HTML');
+  }
+}
+
+function setupDeleteAccount() {
+  const btn = document.getElementById('delete-account-btn');
+  if (!btn) {
+    console.error('delete-account-btn not found in HTML');
+    return;
+  }
+  btn.addEventListener('click', handleDeleteAccount);
+}
+
+async function handleDeleteAccount() {
+  if (!currentUser || !db || !auth) {
+    await showAlert('You need to be logged in, and Firebase must be online, to delete an account.');
+    return;
+  }
+
+  const ok1 = await showConfirm(
+    'This will permanently delete your account, workout history, trains you created, and leaderboard entry. This cannot be undone.',
+    'Delete account?'
+  );
+  if (!ok1) return;
+
+  const ok2 = await showModal({
+    type: 'confirm',
+    title: 'Final confirmation',
+    message: 'Are you sure? Your Gym Grinder data will be erased.',
+    okText: 'Delete forever',
+    cancelText: 'Keep account'
+  });
+  if (!ok2) return;
+
+  const uid = currentUser.uid;
+  const userRef = db.collection('users').doc(uid);
+
+  try {
+    stopSessionListener();
+
+    // Delete history sets (batched)
+    const setsSnap = await userRef.collection('sets').get();
+    let batch = db.batch();
+    let ops = 0;
+    for (const doc of setsSnap.docs) {
+      batch.delete(doc.ref);
+      ops++;
+      if (ops >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        ops = 0;
+      }
+    }
+    if (ops > 0) await batch.commit();
+
+    // Delete trains created by this player
+    const trainsSnap = await db.collection('trains').where('createdBy', '==', uid).get();
+    batch = db.batch();
+    ops = 0;
+    for (const doc of trainsSnap.docs) {
+      batch.delete(doc.ref);
+      ops++;
+      if (ops >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        ops = 0;
+      }
+    }
+    if (ops > 0) await batch.commit();
+
+    // Public leaderboard row
+    await db.collection('leaderboards').doc(uid).delete().catch(() => {});
+
+    // User profile document
+    await userRef.delete();
+
+    clearLocalSessionId();
+    currentUserData = null;
+    currentUser = null;
+    trainsDirty = true;
+
+    try {
+      await auth.currentUser.delete();
+    } catch (authErr) {
+      // Needs a recent login — sign out so the Auth user is not left mid-session
+      console.warn('Auth delete failed (may need recent login):', authErr);
+      await auth.signOut();
+      await showAlert(
+        'Your app data was deleted. To finish removing the login itself, log in once more soon after and tap Delete account again, or the owner can remove the Auth user in Firebase.'
+      );
+      return;
+    }
+
+    await showAlert('Account deleted.');
+  } catch (error) {
+    console.error('Delete account error:', error);
+    await showAlert('Could not delete account: ' + error.message);
   }
 }
 
@@ -678,9 +930,11 @@ async function handleLogin() {
   const email = `${nickname.toLowerCase().replace(/\s+/g, '')}@gymgrinder.app`;
 
   try {
+    pendingNewSession = true; // this login takes over and kicks any other device
     await auth.signInWithEmailAndPassword(email, password);
     await showAlert('✅ Login successful!');
   } catch (error) {
+    pendingNewSession = false;
     if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
       await showAlert('Account not found or wrong password. Please Register first or check your details.');
     } else if (error.code === 'auth/wrong-password') {
@@ -695,7 +949,12 @@ async function handleRegister() {
   const result = await showRegisterForm();
   if (!result) return; // user cancelled
 
-  const { nickname, password, confirmPassword } = result;
+  const { nickname, password, confirmPassword, acceptLegal } = result;
+
+  if (!acceptLegal) {
+    await showAlert('Please accept the Privacy Policy and Terms of Use to create an account.');
+    return;
+  }
 
   if (password.length < 6) {
     await showAlert('Password must be at least 6 characters!');
@@ -710,6 +969,8 @@ async function handleRegister() {
 
   try {
     const userCred = await auth.createUserWithEmailAndPassword(email, password);
+    const sessionId = generateSessionId();
+    setLocalSessionId(sessionId);
     await db.collection('users').doc(userCred.user.uid).set({
       nickname: nickname,
       level: 1,
@@ -723,8 +984,13 @@ async function handleRegister() {
       muscles: emptyMuscles(),
       weeklyMuscles: emptyMuscles(),
       trainCount: 0,            // used by security rules to enforce max 6 trains
-      setCount: 0               // tracks number of history sets so we can prune without full scans
+      setCount: 0,              // tracks number of history sets so we can prune without full scans
+      activeSessionId: sessionId,
+      sessionUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      acceptedTermsAt: firebase.firestore.FieldValue.serverTimestamp(),
+      privacyConsent: true
     });
+    startSessionListener(userCred.user.uid, sessionId);
     await showAlert('✅ Account created!\n\nWaiting for approval.\nYou will be able to play once the app owner activates your account in Firebase.');
   } catch (error) {
     if (error.code === 'auth/email-already-in-use') {
