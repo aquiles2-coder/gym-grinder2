@@ -11,9 +11,14 @@
   <div class="game">
     <header>
       <div id="header-bar" class="header-bar" style="display: none;">
-        <button id="profile-btn" class="header-box tab-btn" data-tab="profile">👤 Profile</button>
-        <button class="header-box tab-btn" data-tab="builder">Create your train</button>
-        <button id="logout-btn" class="header-box header-logout">Logout</button>
+        <div class="header-row header-row-top">
+          <button id="delete-account-btn" class="header-box header-delete" type="button">Delete account</button>
+          <button id="logout-btn" class="header-box header-logout" type="button">Logout</button>
+        </div>
+        <div class="header-row">
+          <button id="profile-btn" class="header-box tab-btn" data-tab="profile">👤 Profile</button>
+          <button class="header-box tab-btn" data-tab="builder">Create your train</button>
+        </div>
       </div>
       <h1>🏋️ Gym Grinder</h1>
     </header>
@@ -21,6 +26,11 @@
     <div id="auth-section">
       <button id="login-btn">Login</button>
       <button id="register-btn">Register</button>
+      <p class="auth-legal">
+        <a href="privacy.html">Privacy policy</a>
+        ·
+        <a href="terms.html">Terms of use</a>
+      </p>
     </div>
 
     <div id="pending-section" style="display: none;" class="stats">
@@ -30,7 +40,6 @@
     </div>
 
     <div id="main-game" style="display: none;">
-      <!-- Menu boxes -->
       <div class="menu-grid">
         <button class="menu-box tab-btn active" data-tab="workout">Workout</button>
         <button class="menu-box tab-btn" data-tab="cardio">Cardio</button>
@@ -40,7 +49,6 @@
         <button class="menu-box tab-btn" data-tab="leaderboards">Leaderboards</button>
       </div>
 
-      <!-- Workout section -->
       <section id="workout" class="tab-content active">
         <h2>Log Workout</h2>
         <div class="exercise-select-row">
@@ -55,7 +63,6 @@
         <p id="log-message"></p>
       </section>
 
-      <!-- Cardio section -->
       <section id="cardio" class="tab-content" style="display: none;">
         <h2>Log Cardio</h2>
         <select id="cardio-select"></select><br><br>
@@ -65,7 +72,6 @@
         <p id="cardio-log-message"></p>
       </section>
 
-      <!-- Builder section – create / edit personal trains (max 6) -->
       <section id="builder" class="tab-content" style="display: none;">
         <h2>🏗️ Create your train</h2>
         <p class="hint">Create up to 6 trains (strength + cardio). They become available for every player. Min. 3 exercises per train.</p>
@@ -75,22 +81,19 @@
         <div id="builder-form" style="display: none;"></div>
       </section>
 
-      <!-- Trains section – use any pre-prepared train -->
       <section id="trains" class="tab-content" style="display: none;">
         <h2>📋 Personalized Trains</h2>
-        <p class="hint">Choose a body part, pick a train, fill weight &amp; reps (or km for cardio), then confirm.</p>
+        <p class="hint">Choose a body part, pick a train, fill weight & reps (or km for cardio), then confirm.</p>
         <div id="trains-list"></div>
         <div id="trains-session" style="display: none;"></div>
       </section>
 
-      <!-- History section – last 30 confirmed sets -->
       <section id="history" class="tab-content" style="display: none;">
         <h2>📜 Recent Sets</h2>
         <p class="hint">Last 30 confirmed sets</p>
         <div id="sets-list"></div>
       </section>
 
-      <!-- Weekly muscle progress section -->
       <section id="weekly" class="tab-content" style="display: none;">
         <h2>📆 Week Progress</h2>
         <p class="hint">XP gained this week per muscle. Resets every Monday with weekly XP.</p>
@@ -98,7 +101,6 @@
         <div id="weekly-muscle-grid" class="muscle-grid"></div>
       </section>
 
-      <!-- Profile section -->
       <section id="profile" class="tab-content" style="display: none;">
         <h2>👤 Your Profile</h2>
         <div id="profile-header" class="stats"></div>
@@ -107,7 +109,6 @@
         <div id="muscle-grid" class="muscle-grid"></div>
       </section>
 
-      <!-- Leaderboards section -->
       <section id="leaderboards" class="tab-content" style="display: none;">
         <h2>Leaderboards</h2>
         <div id="global-lb" class="stats"></div>
@@ -117,7 +118,12 @@
     </div>
   </div>
 
-  <!-- Custom Modal (replaces browser alert / confirm / prompt) -->
+    <footer class="site-footer">
+      <a href="privacy.html">Privacy policy</a>
+      ·
+      <a href="terms.html">Terms of use</a>
+    </footer>
+
   <div id="modal-overlay" class="modal-overlay" style="display: none;" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <h3 id="modal-title">Gym Grinder</h3>
