@@ -8,3 +8,4 @@ const firebaseConfig = {
   measurementId: "G-MT6H4MVTLV"
 };
 
+firebase.initializeApp(firebaseConfig);
