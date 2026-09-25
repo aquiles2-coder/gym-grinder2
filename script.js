@@ -558,8 +558,8 @@ const exerciseFactors = {
   "Row 2 arms": 0.2,
   "Seated Calf Raises 2 legs": 0.16,
   "Shoulder Press 2 arms": 0.30,
-  "Squat bodyweight": 0.08,
-  "Standing Calf Raises bodyweight": 0.09,
+  "Squat bodyweight": 0.09,
+  "Standing Calf Raises bodyweight": 0.075,
   "Wrist Curls 2 hand": 0.43,
   "Wrist Extension 2 hand": 0.39
 };
