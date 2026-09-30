@@ -263,6 +263,7 @@ function showRegisterForm() {
 document.addEventListener('DOMContentLoaded', () => {
   // Safety check: Firebase must be loaded
   if (typeof firebase === 'undefined') {
+    show('auth-section', 'block');
     showAlert('Firebase failed to load. Check your internet connection and firebase-config.js');
     console.error('Firebase is not defined');
     return;
@@ -272,6 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     auth = firebase.auth();
     db = firebase.firestore();
   } catch (e) {
+    show('auth-section', 'block');
     showAlert('Error initializing Firebase: ' + e.message);
     console.error(e);
     return;
@@ -3367,10 +3369,6 @@ async function confirmTrainSession() {
       btn.disabled = false;
       btn.textContent = 'CONFIRM TRAIN 💪';
     }
-  }
-}
-
-
   }
 }
 
