@@ -2311,6 +2311,7 @@ function showBuilderForm(trainData) {
     </div>
   `;
   formEl.style.display = 'block';
+  renumberExerciseRows();
 }
 
 function buildExerciseRowHtml(index, data) {
@@ -2345,7 +2346,11 @@ function buildExerciseRowHtml(index, data) {
     <div class="exercise-row" data-index="${index}">
       <div class="exercise-row-header">
         <span>Exercise #${index + 1}</span>
-        <button type="button" class="btn-small btn-danger" onclick="removeExerciseRow(this)">Remove</button>
+        <div class="exercise-row-actions">
+          <button type="button" class="btn-small btn-move" title="Move up" onclick="moveExerciseRow(this, -1)">▲</button>
+          <button type="button" class="btn-small btn-move" title="Move down" onclick="moveExerciseRow(this, 1)">▼</button>
+          <button type="button" class="btn-small btn-danger" onclick="removeExerciseRow(this)">Remove</button>
+        </div>
       </div>
       <div class="row-inputs">
         <div class="searchable-select ex-searchable">
@@ -2600,13 +2605,42 @@ function removeExerciseRow(btn) {
   renumberExerciseRows();
 }
 
+/**
+ * Move an exercise row up (dir = -1) or down (dir = 1).
+ * DOM order is the saved train order; numbers are rewritten after the swap.
+ */
+function moveExerciseRow(btn, dir) {
+  const row = btn.closest('.exercise-row');
+  const list = document.getElementById('train-exercises-list');
+  if (!row || !list) return;
+
+  const rows = Array.from(list.querySelectorAll('.exercise-row'));
+  const index = rows.indexOf(row);
+  const targetIndex = index + dir;
+  if (index < 0 || targetIndex < 0 || targetIndex >= rows.length) return;
+
+  const neighbor = rows[targetIndex];
+  if (dir === -1) {
+    list.insertBefore(row, neighbor);
+  } else {
+    list.insertBefore(neighbor, row);
+  }
+  renumberExerciseRows();
+}
+
 function renumberExerciseRows() {
   const list = document.getElementById('train-exercises-list');
   if (!list) return;
-  list.querySelectorAll('.exercise-row').forEach((row, i) => {
+  const rows = list.querySelectorAll('.exercise-row');
+  rows.forEach((row, i) => {
     row.dataset.index = i;
     const header = row.querySelector('.exercise-row-header span');
     if (header) header.textContent = `Exercise #${i + 1}`;
+
+    const upBtn = row.querySelector('.btn-move[title="Move up"]');
+    const downBtn = row.querySelector('.btn-move[title="Move down"]');
+    if (upBtn) upBtn.disabled = (i === 0);
+    if (downBtn) downBtn.disabled = (i === rows.length - 1);
   });
 }
 
@@ -3333,6 +3367,10 @@ async function confirmTrainSession() {
       btn.disabled = false;
       btn.textContent = 'CONFIRM TRAIN 💪';
     }
+  }
+}
+
+
   }
 }
 
